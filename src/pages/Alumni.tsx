@@ -1,4 +1,3 @@
-
 import React, { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { toast } from "@/components/ui/use-toast";
@@ -11,12 +10,14 @@ import AlumniEvents from '@/components/alumni/AlumniEvents';
 import AlumniNetworking from '@/components/alumni/AlumniNetworking';
 import AlumniDocuments from '@/components/alumni/AlumniDocuments';
 import AlumniSupport from '@/components/alumni/AlumniSupport';
+import UserProfile from '@/components/UserProfile';
 
 const Alumni = () => {
   const [activeView, setActiveView] = useState('dashboard');
   const [user, setUser] = useState<any>(null);
   const [loading, setLoading] = useState(true);
   const [sidebarCollapsed, setSidebarCollapsed] = useState(false);
+  const [showProfile, setShowProfile] = useState(false);
   const { theme, toggleTheme } = useTheme();
   const navigate = useNavigate();
 
@@ -102,6 +103,10 @@ const Alumni = () => {
     }
   };
 
+  const handleUserProfile = () => {
+    setShowProfile(true);
+  };
+
   return (
     <div className="min-h-screen bg-background">
       {/* Background Grid */}
@@ -164,7 +169,7 @@ const Alumni = () => {
               <Button 
                 variant="ghost" 
                 size="icon"
-                onClick={handleLogout}
+                onClick={handleUserProfile}
                 className="h-9 w-9 rounded-lg hover:bg-white/10 transition-colors"
               >
                 <User className="h-5 w-5 text-foreground" />
@@ -200,6 +205,13 @@ const Alumni = () => {
           {renderContent()}
         </div>
       </div>
+
+      {/* User Profile Modal */}
+      <UserProfile
+        user={user}
+        isOpen={showProfile}
+        onClose={() => setShowProfile(false)}
+      />
     </div>
   );
 };

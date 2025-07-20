@@ -1,9 +1,9 @@
-
 import React, { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { toast } from "@/components/ui/use-toast";
 import { Button } from '@/components/ui/button';
-import { User, BookOpen, Calendar, CreditCard, MessageSquare, Users, Bell, Settings, TrendingUp } from 'lucide-react';
+import { User, BookOpen, Calendar, CreditCard, MessageSquare, Users, Bell, Settings, TrendingUp, Moon, Sun } from 'lucide-react';
+import { useTheme } from '@/contexts/ThemeContext';
 import SidebarNavigation from '@/components/layout/SidebarNavigation';
 import ParentDashboard from '@/components/parent/ParentDashboard';
 import AcademicProgress from '@/components/parent/AcademicProgress';
@@ -11,12 +11,15 @@ import AttendanceTracking from '@/components/parent/AttendanceTracking';
 import PaymentsFees from '@/components/parent/PaymentsFees';
 import ParentCommunication from '@/components/parent/ParentCommunication';
 import EventsMeetings from '@/components/parent/EventsMeetings';
+import UserProfile from '@/components/UserProfile';
 
 const Parent = () => {
   const [activeView, setActiveView] = useState('dashboard');
   const [user, setUser] = useState<any>(null);
   const [loading, setLoading] = useState(true);
   const [sidebarCollapsed, setSidebarCollapsed] = useState(false);
+  const [showProfile, setShowProfile] = useState(false);
+  const { theme, toggleTheme } = useTheme();
   const navigate = useNavigate();
 
   useEffect(() => {
@@ -100,6 +103,10 @@ const Parent = () => {
     }
   };
 
+  const handleUserProfile = () => {
+    setShowProfile(true);
+  };
+
   return (
     <div className="min-h-screen bg-background">
       {/* Background Grid */}
@@ -141,6 +148,15 @@ const Parent = () => {
               >
                 <Bell className="h-5 w-5 text-foreground" />
               </Button>
+
+              <Button 
+                variant="ghost" 
+                size="icon"
+                onClick={toggleTheme}
+                className="h-9 w-9 rounded-lg hover:bg-white/10 transition-colors"
+              >
+                {theme === 'dark' ? <Sun className="h-5 w-5 text-foreground" /> : <Moon className="h-5 w-5 text-foreground" />}
+              </Button>
               
               <Button 
                 variant="ghost" 
@@ -153,7 +169,7 @@ const Parent = () => {
               <Button 
                 variant="ghost" 
                 size="icon"
-                onClick={handleLogout}
+                onClick={handleUserProfile}
                 className="h-9 w-9 rounded-lg hover:bg-white/10 transition-colors"
               >
                 <User className="h-5 w-5 text-foreground" />
@@ -179,6 +195,13 @@ const Parent = () => {
           {renderContent()}
         </div>
       </div>
+
+      {/* User Profile Modal */}
+      <UserProfile
+        user={user}
+        isOpen={showProfile}
+        onClose={() => setShowProfile(false)}
+      />
     </div>
   );
 };

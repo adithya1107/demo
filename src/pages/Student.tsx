@@ -1,4 +1,3 @@
-
 import React, { useState, useEffect } from 'react';
 import { 
   BookOpen, 
@@ -28,11 +27,13 @@ import CalendarAttendance from '@/components/student/CalendarAttendance';
 import CommunicationCenter from '@/components/student/CommunicationCenter';
 import HostelFacility from '@/components/student/HostelFacility';
 import SupportHelp from '@/components/student/SupportHelp';
+import UserProfile from '@/components/UserProfile';
 
 const Student = () => {
   const [activeView, setActiveView] = useState('dashboard');
   const [studentData, setStudentData] = useState<any>(null);
   const [sidebarCollapsed, setSidebarCollapsed] = useState(false);
+  const [showProfile, setShowProfile] = useState(false);
   const { theme, toggleTheme } = useTheme();
 
   useEffect(() => {
@@ -57,10 +58,7 @@ const Student = () => {
   };
 
   const handleUserProfile = () => {
-    toast({
-      title: 'Profile',
-      description: 'Profile management will be available soon.',
-    });
+    setShowProfile(true);
   };
 
   const handleLogout = () => {
@@ -185,7 +183,7 @@ const Student = () => {
               <Button 
                 variant="ghost" 
                 size="icon"
-                onClick={handleLogout}
+                onClick={handleUserProfile}
                 className="h-9 w-9 rounded-lg hover:bg-white/10 transition-colors"
               >
                 <User className="h-5 w-5 text-foreground" />
@@ -221,6 +219,13 @@ const Student = () => {
           {renderContent()}
         </div>
       </div>
+
+      {/* User Profile Modal */}
+      <UserProfile
+        user={studentData}
+        isOpen={showProfile}
+        onClose={() => setShowProfile(false)}
+      />
     </div>
   );
 };
