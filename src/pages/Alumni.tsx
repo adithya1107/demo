@@ -3,7 +3,8 @@ import React, { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { toast } from "@/components/ui/use-toast";
 import { Button } from '@/components/ui/button';
-import { Home, Calendar, Users, FileText, HelpCircle, Bell, Settings, User } from 'lucide-react';
+import { Home, Calendar, Users, FileText, HelpCircle, Bell, Settings, User, Moon, Sun } from 'lucide-react';
+import { useTheme } from '@/contexts/ThemeContext';
 import SidebarNavigation from '@/components/layout/SidebarNavigation';
 import AlumniDashboard from '@/components/alumni/AlumniDashboard';
 import AlumniEvents from '@/components/alumni/AlumniEvents';
@@ -16,6 +17,7 @@ const Alumni = () => {
   const [user, setUser] = useState<any>(null);
   const [loading, setLoading] = useState(true);
   const [sidebarCollapsed, setSidebarCollapsed] = useState(false);
+  const { theme, toggleTheme } = useTheme();
   const navigate = useNavigate();
 
   useEffect(() => {
@@ -136,6 +138,15 @@ const Alumni = () => {
                 className="h-9 w-9 rounded-lg hover:bg-white/10 transition-colors"
               >
                 <Bell className="h-5 w-5 text-foreground" />
+              </Button>
+              
+              <Button 
+                variant="ghost" 
+                size="icon"
+                onClick={toggleTheme}
+                className="h-9 w-9 rounded-lg hover:bg-white/10 transition-colors"
+              >
+                {theme === 'dark' ? <Sun className="h-5 w-5 text-foreground" /> : <Moon className="h-5 w-5 text-foreground" />}
               </Button>
               
               <Button 

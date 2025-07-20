@@ -1,4 +1,3 @@
-
 import React, { useState, useEffect } from 'react';
 import { 
   BookOpen, 
@@ -17,6 +16,7 @@ import {
 } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { toast } from '@/components/ui/use-toast';
+import { useTheme } from '@/contexts/ThemeContext';
 import SidebarNavigation from '@/components/layout/SidebarNavigation';
 import StudentDashboard from '@/components/student/StudentDashboard';
 import ScheduleTimetable from '@/components/student/ScheduleTimetable';
@@ -31,8 +31,8 @@ import SupportHelp from '@/components/student/SupportHelp';
 const Student = () => {
   const [activeView, setActiveView] = useState('dashboard');
   const [studentData, setStudentData] = useState<any>(null);
-  const [isDarkMode, setIsDarkMode] = useState(true);
   const [sidebarCollapsed, setSidebarCollapsed] = useState(false);
+  const { theme, toggleTheme } = useTheme();
 
   useEffect(() => {
     const userData = localStorage.getItem('colcord_user');
@@ -162,10 +162,10 @@ const Student = () => {
               <Button 
                 variant="ghost" 
                 size="icon"
-                onClick={() => setIsDarkMode(!isDarkMode)}
+                onClick={toggleTheme}
                 className="h-9 w-9 rounded-lg hover:bg-white/10 transition-colors"
               >
-                {isDarkMode ? <Sun className="h-5 w-5 text-foreground" /> : <Moon className="h-5 w-5 text-foreground" />}
+                {theme === 'dark' ? <Sun className="h-5 w-5 text-foreground" /> : <Moon className="h-5 w-5 text-foreground" />}
               </Button>
               
               <Button 
