@@ -22,7 +22,6 @@ const ParentDashboard = ({ user }: ParentDashboardProps) => {
 
   const fetchChildrenData = async () => {
     try {
-      // This would fetch real parent-student links from the database
       const { data, error } = await supabase
         .from('parent_student_links')
         .select(`
@@ -38,7 +37,6 @@ const ParentDashboard = ({ user }: ParentDashboardProps) => {
 
       if (error) {
         console.error('Error fetching children:', error);
-        // For now, show empty state
         setChildren([]);
       } else {
         setChildren(data || []);
@@ -52,24 +50,39 @@ const ParentDashboard = ({ user }: ParentDashboardProps) => {
   };
 
   const handleViewGrades = () => {
-    toast({
-      title: 'Feature Coming Soon',
-      description: 'Grade viewing feature will be available soon.',
-    });
+    const academicElement = document.querySelector('[data-sidebar-item="academic"]');
+    if (academicElement) {
+      (academicElement as HTMLElement).click();
+    } else {
+      toast({
+        title: 'Academic Progress',
+        description: 'Navigate to Academic Progress to view grades.',
+      });
+    }
   };
 
   const handlePayFees = () => {
-    toast({
-      title: 'Payment Portal',
-      description: 'Fee payment feature will be available soon.',
-    });
+    const paymentsElement = document.querySelector('[data-sidebar-item="payments"]');
+    if (paymentsElement) {
+      (paymentsElement as HTMLElement).click();
+    } else {
+      toast({
+        title: 'Payments & Fees',
+        description: 'Navigate to Payments section to manage fees.',
+      });
+    }
   };
 
   const handleViewAttendance = () => {
-    toast({
-      title: 'Attendance Report',
-      description: 'Attendance viewing feature will be available soon.',
-    });
+    const attendanceElement = document.querySelector('[data-sidebar-item="attendance"]');
+    if (attendanceElement) {
+      (attendanceElement as HTMLElement).click();
+    } else {
+      toast({
+        title: 'Attendance Report',
+        description: 'Navigate to Attendance section to view records.',
+      });
+    }
   };
 
   const handleContactSupport = () => {

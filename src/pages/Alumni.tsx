@@ -81,6 +81,10 @@ const Alumni = () => {
     { id: 'support', label: 'Support', icon: HelpCircle },
   ];
 
+  const handleViewChange = (viewId: string) => {
+    setActiveView(viewId);
+  };
+
   const renderContent = () => {
     switch (activeView) {
       case 'dashboard':
@@ -172,14 +176,24 @@ const Alumni = () => {
 
       {/* Main Layout */}
       <div className="relative z-10 flex">
-        {/* Sidebar */}
-        <SidebarNavigation
-          items={sidebarItems}
-          activeItem={activeView}
-          onItemClick={setActiveView}
-          userType="alumni"
-          collapsed={sidebarCollapsed}
-        />
+        {/* Sidebar with data attributes */}
+        <div className="sidebar-container">
+          {sidebarItems.map((item) => (
+            <div 
+              key={item.id} 
+              data-sidebar-item={item.id}
+              style={{ display: 'none' }}
+              onClick={() => handleViewChange(item.id)}
+            />
+          ))}
+          <SidebarNavigation
+            items={sidebarItems}
+            activeItem={activeView}
+            onItemClick={handleViewChange}
+            userType="alumni"
+            collapsed={sidebarCollapsed}
+          />
+        </div>
 
         {/* Main Content */}
         <div className="flex-1 p-6">

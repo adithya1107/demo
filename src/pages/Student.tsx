@@ -1,3 +1,4 @@
+
 import React, { useState, useEffect } from 'react';
 import { 
   BookOpen, 
@@ -44,7 +45,7 @@ const Student = () => {
   const handleNotifications = () => {
     toast({
       title: 'Notifications',
-      description: 'You have no new notifications.',
+      description: 'No new notifications at the moment.',
     });
   };
 
@@ -93,6 +94,10 @@ const Student = () => {
     { id: 'hostel', label: 'Hostel', icon: Building },
     { id: 'support', label: 'Support', icon: HelpCircle },
   ];
+
+  const handleViewChange = (viewId: string) => {
+    setActiveView(viewId);
+  };
 
   const renderContent = () => {
     switch (activeView) {
@@ -192,14 +197,24 @@ const Student = () => {
 
       {/* Main Layout */}
       <div className="relative z-10 flex">
-        {/* Sidebar */}
-        <SidebarNavigation
-          items={sidebarItems}
-          activeItem={activeView}
-          onItemClick={setActiveView}
-          userType="student"
-          collapsed={sidebarCollapsed}
-        />
+        {/* Sidebar with data attributes */}
+        <div className="sidebar-container">
+          {sidebarItems.map((item) => (
+            <div 
+              key={item.id} 
+              data-sidebar-item={item.id}
+              style={{ display: 'none' }}
+              onClick={() => handleViewChange(item.id)}
+            />
+          ))}
+          <SidebarNavigation
+            items={sidebarItems}
+            activeItem={activeView}
+            onItemClick={handleViewChange}
+            userType="student"
+            collapsed={sidebarCollapsed}
+          />
+        </div>
 
         {/* Main Content */}
         <div className="flex-1 p-6">

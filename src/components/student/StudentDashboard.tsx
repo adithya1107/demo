@@ -3,9 +3,10 @@ import React, { useEffect, useState } from 'react';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
-import { BookOpen, Calendar, Award, Users } from 'lucide-react';
+import { BookOpen, Calendar, Award, Users, Bell } from 'lucide-react';
 import PermissionWrapper from '@/components/PermissionWrapper';
 import { supabase } from '@/integrations/supabase/client';
+import { toast } from '@/components/ui/use-toast';
 
 interface StudentDashboardProps {
   studentData: any;
@@ -15,6 +16,7 @@ const StudentDashboard = ({ studentData }: StudentDashboardProps) => {
   const [enrolledCourses, setEnrolledCourses] = useState([]);
   const [upcomingAssignments, setUpcomingAssignments] = useState([]);
   const [currentGrade, setCurrentGrade] = useState('N/A');
+  const [attendancePercentage, setAttendancePercentage] = useState('N/A');
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
@@ -59,7 +61,19 @@ const StudentDashboard = ({ studentData }: StudentDashboardProps) => {
         setUpcomingAssignments(assignments);
       }
 
-      // Calculate current CGPA (mock calculation)
+      // Fetch attendance data
+      const { data: attendance, error: attendanceError } = await supabase
+        .from('attendance')
+        .select('status')
+        .eq('student_id', studentData.id);
+
+      if (!attendanceError && attendance && attendance.length > 0) {
+        const presentCount = attendance.filter(a => a.status === 'present').length;
+        const percentage = Math.round((presentCount / attendance.length) * 100);
+        setAttendancePercentage(`${percentage}%`);
+      }
+
+      // Calculate current CGPA from enrollments
       if (courses && courses.length > 0) {
         const gradesCount = courses.filter(c => c.grade).length;
         if (gradesCount > 0) {
@@ -83,15 +97,15 @@ const StudentDashboard = ({ studentData }: StudentDashboardProps) => {
       permission: 'view_submit_assignments' as const
     },
     {
-      title: 'Upcoming Assignments',
+      title: 'Pending Assignments',
       value: upcomingAssignments.length.toString(),
       icon: Calendar,
       color: 'text-orange-600',
       permission: 'view_submit_assignments' as const
     },
     {
-      title: 'Current CGPA',
-      value: currentGrade,
+      title: 'Attendance',
+      value: attendancePercentage,
       icon: Award,
       color: 'text-green-600',
       permission: 'view_grades' as const
@@ -105,7 +119,18 @@ const StudentDashboard = ({ studentData }: StudentDashboardProps) => {
       icon: BookOpen,
       color: 'bg-blue-50 text-blue-600',
       permission: 'view_submit_assignments' as const,
-      action: () => window.location.hash = '#assignments'
+      action: () => {
+        // Navigate to assignments section
+        const assignmentElement = document.querySelector('[data-sidebar-item="assignments"]');
+        if (assignmentElement) {
+          (assignmentElement as HTMLElement).click();
+        } else {
+          toast({
+            title: 'Assignments',
+            description: 'Navigate to Assignments section to view your assignments.',
+          });
+        }
+      }
     },
     {
       title: 'Join Discussion',
@@ -113,7 +138,53 @@ const StudentDashboard = ({ studentData }: StudentDashboardProps) => {
       icon: Users,
       color: 'bg-purple-50 text-purple-600',
       permission: 'join_forums' as const,
-      action: () => window.location.hash = '#communication'
+      action: () => {
+        const communicationElement = document.querySelector('[data-sidebar-item="communication"]');
+        if (communicationElement) {
+          (communicationElement as HTMLElement).click();
+        } else {
+          toast({
+            title: 'Communication',
+            description: 'Navigate to Communication section to join discussions.',
+          });
+        }
+      }
+    },
+    {
+      title: 'Check Schedule',
+      description: 'View your class timetable',
+      icon: Calendar,
+      color: 'bg-green-50 text-green-600',
+      permission: 'view_submit_assignments' as const,
+      action: () => {
+        const scheduleElement = document.querySelector('[data-sidebar-item="schedule"]');
+        if (scheduleElement) {
+          (scheduleElement as HTMLElement).click();
+        } else {
+          toast({
+            title: 'Schedule',
+            description: 'Navigate to Schedule section to view your timetable.',
+          });
+        }
+      }
+    },
+    {
+      title: 'Support Center',
+      description: 'Get help with any issues',
+      icon: Bell,
+      color: 'bg-yellow-50 text-yellow-600',
+      permission: 'support_tickets' as const,
+      action: () => {
+        const supportElement = document.querySelector('[data-sidebar-item="support"]');
+        if (supportElement) {
+          (supportElement as HTMLElement).click();
+        } else {
+          toast({
+            title: 'Support',
+            description: 'Navigate to Support section for assistance.',
+          });
+        }
+      }
     }
   ];
 
@@ -228,6 +299,7 @@ const StudentDashboard = ({ studentData }: StudentDashboardProps) => {
                   ))
                 ) : (
                   <div className="text-center py-8">
+                    <BookOpen className="h-12 w-12 text-muted-foreground mx-auto mb-2 opacity-50" />
                     <p className="text-muted-foreground">No courses enrolled yet</p>
                   </div>
                 )}
