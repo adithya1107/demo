@@ -11,28 +11,49 @@ import MultiStepLogin from '@/components/MultiStepLogin';
 const Index = () => {
   const navigate = useNavigate();
   const [session, setSession] = useState<Session | null>(null);
+  const [loading, setLoading] = useState(true);
   const { theme, toggleTheme } = useTheme();
 
   useEffect(() => {
-    // Check if user is already authenticated with Supabase
+    let mounted = true;
+
+    // Set up auth state listener
     const { data: { subscription } } = supabase.auth.onAuthStateChange(
       (event, session) => {
-        setSession(session);
+        if (!mounted) return;
         
-        if (session?.user) {
-          // User is authenticated, they'll be redirected by NavigationWrapper
-          // based on their profile data
-        }
+        console.log('Index: Auth state changed:', event, session?.user?.email);
+        setSession(session);
+        setLoading(false);
       }
     );
 
+    // Check for existing session
     supabase.auth.getSession().then(({ data: { session } }) => {
+      if (!mounted) return;
+      
+      console.log('Index: Initial session check:', session?.user?.email);
       setSession(session);
+      setLoading(false);
     });
 
-    return () => subscription.unsubscribe();
-  }, [navigate]);
+    return () => {
+      mounted = false;
+      subscription.unsubscribe();
+    };
+  }, []);
 
+  // Show loading spinner while checking authentication
+  if (loading) {
+    return (
+      <div className="min-h-screen flex items-center justify-center bg-background">
+        <div className="animate-spin rounded-full h-32 w-32 border-b-2 border-primary"></div>
+      </div>
+    );
+  }
+
+  // If user is authenticated, NavigationWrapper will redirect them
+  // This page should only show for unauthenticated users
   return (
     <div className="min-h-screen bg-background">
       {/* Industrial Grid Background */}
