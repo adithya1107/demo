@@ -3,7 +3,7 @@ import React from 'react';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
-import { GraduationCap, Heart, Calendar, Users, Award, MessageSquare } from 'lucide-react';
+import { GraduationCap, Calendar, Users, Award, MessageSquare } from 'lucide-react';
 import PermissionWrapper from '@/components/PermissionWrapper';
 
 interface AlumniDashboardProps {
@@ -18,13 +18,6 @@ const AlumniDashboard = ({ user }: AlumniDashboardProps) => {
       icon: GraduationCap,
       color: 'text-role-alumni',
       permission: 'view_personal_dashboard' as const
-    },
-    {
-      title: 'Total Contributions',
-      value: '₹50,000',
-      icon: Heart,
-      color: 'text-red-600',
-      permission: 'alumni_contributions' as const
     },
     {
       title: 'Events Attended',
@@ -43,12 +36,6 @@ const AlumniDashboard = ({ user }: AlumniDashboardProps) => {
   ];
 
   const recentActivities = [
-    {
-      title: 'Contribution Made',
-      description: 'Donated ₹10,000 to scholarship fund',
-      time: '1 week ago',
-      permission: 'alumni_contributions' as const
-    },
     {
       title: 'Event Registered',
       description: 'Annual Alumni Meet 2024',
@@ -70,13 +57,6 @@ const AlumniDashboard = ({ user }: AlumniDashboardProps) => {
   ];
 
   const quickActions = [
-    {
-      title: 'Make Contribution',
-      description: 'Support current students and college',
-      icon: Heart,
-      color: 'bg-red-50 text-red-600',
-      permission: 'alumni_contributions' as const
-    },
     {
       title: 'Alumni Events',
       description: 'View and register for upcoming events',
@@ -116,7 +96,7 @@ const AlumniDashboard = ({ user }: AlumniDashboardProps) => {
       </Card>
 
       {/* Quick Stats */}
-      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6">
+      <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
         {alumniStats.map((stat, index) => {
           const Icon = stat.icon;
           return (
@@ -166,7 +146,7 @@ const AlumniDashboard = ({ user }: AlumniDashboardProps) => {
         <Card className="border-white/10 bg-card/50 backdrop-blur-sm">
           <CardHeader>
             <CardTitle className="text-card-foreground">Quick Actions</CardTitle>
-            <CardDescription>Connect and contribute to your alma mater</CardDescription>
+            <CardDescription>Connect with your alma mater</CardDescription>
           </CardHeader>
           <CardContent className="space-y-3">
             {quickActions.map((action, index) => {
@@ -212,7 +192,7 @@ const AlumniDashboard = ({ user }: AlumniDashboardProps) => {
                   attendees: '150+ registered'
                 },
                 {
-                  name: 'Scholarship Fundraiser',
+                  name: 'Career Networking Event',
                   date: 'February 10, 2025',
                   location: 'Bangalore',
                   attendees: '50+ confirmed'
@@ -234,26 +214,6 @@ const AlumniDashboard = ({ user }: AlumniDashboardProps) => {
                 </div>
               ))}
             </div>
-          </CardContent>
-        </Card>
-      </PermissionWrapper>
-
-      {/* Contribution Impact */}
-      <PermissionWrapper permission="alumni_contributions">
-        <Card className="border-role-alumni/20 bg-role-alumni/5 backdrop-blur-sm">
-          <CardHeader>
-            <CardTitle className="flex items-center space-x-2 text-role-alumni">
-              <Heart className="h-5 w-5" />
-              <span>Your Impact</span>
-            </CardTitle>
-          </CardHeader>
-          <CardContent>
-            <p className="text-card-foreground mb-4">
-              Your contributions have helped 5 students with scholarships this year. Thank you for giving back!
-            </p>
-            <Button className="bg-role-alumni hover:bg-role-alumni/90 text-white">
-              Make Another Contribution
-            </Button>
           </CardContent>
         </Card>
       </PermissionWrapper>

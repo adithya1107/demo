@@ -4,7 +4,6 @@ import {
   BookOpen, 
   Calendar, 
   MessageSquare, 
-  CreditCard, 
   Building, 
   HelpCircle,
   GraduationCap,
@@ -17,6 +16,7 @@ import {
   User
 } from 'lucide-react';
 import { Button } from '@/components/ui/button';
+import { toast } from '@/components/ui/use-toast';
 import SidebarNavigation from '@/components/layout/SidebarNavigation';
 import StudentDashboard from '@/components/student/StudentDashboard';
 import ScheduleTimetable from '@/components/student/ScheduleTimetable';
@@ -25,7 +25,6 @@ import CoursesLearningSnapshot from '@/components/student/CoursesLearningSnapsho
 import MyCourses from '@/components/student/MyCourses';
 import CalendarAttendance from '@/components/student/CalendarAttendance';
 import CommunicationCenter from '@/components/student/CommunicationCenter';
-import PaymentsFees from '@/components/student/PaymentsFees';
 import HostelFacility from '@/components/student/HostelFacility';
 import SupportHelp from '@/components/student/SupportHelp';
 
@@ -41,6 +40,36 @@ const Student = () => {
       setStudentData(JSON.parse(userData));
     }
   }, []);
+
+  const handleNotifications = () => {
+    toast({
+      title: 'Notifications',
+      description: 'You have no new notifications.',
+    });
+  };
+
+  const handleSettings = () => {
+    toast({
+      title: 'Settings',
+      description: 'Settings panel will be available soon.',
+    });
+  };
+
+  const handleUserProfile = () => {
+    toast({
+      title: 'Profile',
+      description: 'Profile management will be available soon.',
+    });
+  };
+
+  const handleLogout = () => {
+    localStorage.removeItem('colcord_user');
+    toast({
+      title: 'Logged Out',
+      description: 'You have been successfully logged out.',
+    });
+    window.location.href = '/';
+  };
 
   if (!studentData) {
     return (
@@ -61,7 +90,6 @@ const Student = () => {
     { id: 'assignments', label: 'Assignments', icon: FileText },
     { id: 'events', label: 'Events', icon: Bell },
     { id: 'communication', label: 'Communication', icon: MessageSquare },
-    { id: 'payments', label: 'Payments', icon: CreditCard },
     { id: 'hostel', label: 'Hostel', icon: Building },
     { id: 'support', label: 'Support', icon: HelpCircle },
   ];
@@ -82,8 +110,6 @@ const Student = () => {
         return <CalendarAttendance studentData={studentData} />;
       case 'communication':
         return <CommunicationCenter studentData={studentData} />;
-      case 'payments':
-        return <PaymentsFees studentData={studentData} />;
       case 'hostel':
         return <HostelFacility studentData={studentData} />;
       case 'support':
@@ -127,6 +153,7 @@ const Student = () => {
               <Button 
                 variant="ghost" 
                 size="icon"
+                onClick={handleNotifications}
                 className="h-9 w-9 rounded-lg hover:bg-white/10 transition-colors"
               >
                 <Bell className="h-5 w-5 text-foreground" />
@@ -144,6 +171,7 @@ const Student = () => {
               <Button 
                 variant="ghost" 
                 size="icon"
+                onClick={handleSettings}
                 className="h-9 w-9 rounded-lg hover:bg-white/10 transition-colors"
               >
                 <Settings className="h-5 w-5 text-foreground" />
@@ -152,10 +180,7 @@ const Student = () => {
               <Button 
                 variant="ghost" 
                 size="icon"
-                onClick={() => {
-                  localStorage.removeItem('colcord_user');
-                  window.location.href = '/';
-                }}
+                onClick={handleLogout}
                 className="h-9 w-9 rounded-lg hover:bg-white/10 transition-colors"
               >
                 <User className="h-5 w-5 text-foreground" />

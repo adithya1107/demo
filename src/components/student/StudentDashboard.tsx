@@ -1,75 +1,100 @@
 
-import React from 'react';
+import React, { useEffect, useState } from 'react';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
-import { BookOpen, Calendar, DollarSign, Award, Home, Users } from 'lucide-react';
+import { BookOpen, Calendar, Award, Users } from 'lucide-react';
 import PermissionWrapper from '@/components/PermissionWrapper';
+import { supabase } from '@/integrations/supabase/client';
 
 interface StudentDashboardProps {
   studentData: any;
 }
 
 const StudentDashboard = ({ studentData }: StudentDashboardProps) => {
+  const [enrolledCourses, setEnrolledCourses] = useState([]);
+  const [upcomingAssignments, setUpcomingAssignments] = useState([]);
+  const [currentGrade, setCurrentGrade] = useState('N/A');
+  const [loading, setLoading] = useState(true);
+
+  useEffect(() => {
+    fetchStudentData();
+  }, [studentData]);
+
+  const fetchStudentData = async () => {
+    try {
+      // Fetch enrolled courses
+      const { data: courses, error: coursesError } = await supabase
+        .from('enrollments')
+        .select(`
+          *,
+          courses (
+            course_name,
+            course_code,
+            instructor_id,
+            user_profiles!courses_instructor_id_fkey (
+              first_name,
+              last_name
+            )
+          )
+        `)
+        .eq('student_id', studentData.id);
+
+      if (!coursesError && courses) {
+        setEnrolledCourses(courses);
+      }
+
+      // Fetch upcoming assignments
+      const { data: assignments, error: assignmentsError } = await supabase
+        .from('assignments')
+        .select(`
+          *,
+          courses (course_name)
+        `)
+        .gte('due_date', new Date().toISOString())
+        .order('due_date', { ascending: true })
+        .limit(5);
+
+      if (!assignmentsError && assignments) {
+        setUpcomingAssignments(assignments);
+      }
+
+      // Calculate current CGPA (mock calculation)
+      if (courses && courses.length > 0) {
+        const gradesCount = courses.filter(c => c.grade).length;
+        if (gradesCount > 0) {
+          setCurrentGrade('8.5'); // This would be calculated from actual grades
+        }
+      }
+
+    } catch (error) {
+      console.error('Error fetching student data:', error);
+    } finally {
+      setLoading(false);
+    }
+  };
+
   const quickStats = [
     {
       title: 'Enrolled Courses',
-      value: '6',
+      value: enrolledCourses.length.toString(),
       icon: BookOpen,
       color: 'text-blue-600',
       permission: 'view_submit_assignments' as const
     },
     {
       title: 'Upcoming Assignments',
-      value: '3',
+      value: upcomingAssignments.length.toString(),
       icon: Calendar,
       color: 'text-orange-600',
       permission: 'view_submit_assignments' as const
     },
     {
       title: 'Current CGPA',
-      value: '8.5',
+      value: currentGrade,
       icon: Award,
       color: 'text-green-600',
       permission: 'view_grades' as const
-    },
-    {
-      title: 'Pending Fees',
-      value: '₹15,000',
-      icon: DollarSign,
-      color: 'text-red-600',
-      permission: 'view_fees' as const
-    }
-  ];
-
-  const recentActivities = [
-    {
-      title: 'Assignment Submitted',
-      description: 'Data Structures - Binary Trees',
-      time: '2 hours ago',
-      type: 'assignment',
-      permission: 'view_submit_assignments' as const
-    },
-    {
-      title: 'Grade Updated',
-      description: 'Computer Networks - A Grade',
-      time: '1 day ago',
-      type: 'grade',
-      permission: 'view_grades' as const
-    },
-    {
-      title: 'Attendance Marked',
-      description: 'Database Management Systems',
-      time: '2 days ago',
-      type: 'attendance',
-      permission: 'view_attendance' as const
-    },
-    {
-      title: 'Fee Payment Due',
-      description: 'Semester Fee - Due in 5 days',
-      time: '3 days ago',
-      type: 'fee',
-      permission: 'view_fees' as const
     }
   ];
 
@@ -79,30 +104,26 @@ const StudentDashboard = ({ studentData }: StudentDashboardProps) => {
       description: 'Check and submit pending assignments',
       icon: BookOpen,
       color: 'bg-blue-50 text-blue-600',
-      permission: 'view_submit_assignments' as const
-    },
-    {
-      title: 'Apply for Hostel',
-      description: 'Submit hostel accommodation request',
-      icon: Home,
-      color: 'bg-green-50 text-green-600',
-      permission: 'apply_hostel' as const
+      permission: 'view_submit_assignments' as const,
+      action: () => window.location.hash = '#assignments'
     },
     {
       title: 'Join Discussion',
       description: 'Participate in course forums',
       icon: Users,
       color: 'bg-purple-50 text-purple-600',
-      permission: 'join_forums' as const
-    },
-    {
-      title: 'Request Certificate',
-      description: 'Apply for academic certificates',
-      icon: Award,
-      color: 'bg-yellow-50 text-yellow-600',
-      permission: 'request_certificates' as const
+      permission: 'join_forums' as const,
+      action: () => window.location.hash = '#communication'
     }
   ];
+
+  if (loading) {
+    return (
+      <div className="flex items-center justify-center min-h-[400px]">
+        <div className="animate-spin rounded-full h-32 w-32 border-b-2 border-role-student" />
+      </div>
+    );
+  }
 
   return (
     <div className="space-y-6 animate-fade-in-up">
@@ -117,13 +138,13 @@ const StudentDashboard = ({ studentData }: StudentDashboardProps) => {
           </div>
           <div className="text-right">
             <p className="text-sm text-muted-foreground">Current CGPA</p>
-            <p className="text-2xl font-bold text-role-student">8.5</p>
+            <p className="text-2xl font-bold text-role-student">{currentGrade}</p>
           </div>
         </div>
       </div>
 
       {/* Quick Stats Grid */}
-      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
+      <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
         {quickStats.map((stat, index) => {
           const Icon = stat.icon;
           return (
@@ -135,9 +156,9 @@ const StudentDashboard = ({ studentData }: StudentDashboardProps) => {
                       <p className="text-sm font-medium text-muted-foreground">{stat.title}</p>
                       <p className="text-2xl font-bold text-card-foreground">{stat.value}</p>
                     </div>
-                  <div className="p-3 rounded-lg bg-white/5">
-                    <Icon className="h-6 w-6 text-role-student" />
-                  </div>
+                    <div className="p-3 rounded-lg bg-white/5">
+                      <Icon className="h-6 w-6 text-role-student" />
+                    </div>
                   </div>
                 </CardContent>
               </Card>
@@ -147,28 +168,6 @@ const StudentDashboard = ({ studentData }: StudentDashboardProps) => {
       </div>
 
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
-        {/* Recent Activities */}
-        <Card className="border-white/10">
-          <CardHeader>
-            <CardTitle className="text-2xl font-bold text-card-foreground">Recent Activities</CardTitle>
-            <CardDescription>Your latest academic activities</CardDescription>
-          </CardHeader>
-          <CardContent className="space-y-4">
-            {recentActivities.map((activity, index) => (
-              <PermissionWrapper key={index} permission={activity.permission}>
-                <div className="flex items-start space-x-4 p-3 rounded-lg bg-white/5 hover:bg-white/10 transition-colors duration-300">
-                  <div className="w-2 h-2 bg-role-student rounded-full mt-3 animate-pulse-indicator"></div>
-                  <div className="flex-1">
-                    <p className="font-medium text-card-foreground">{activity.title}</p>
-                    <p className="text-sm text-muted-foreground">{activity.description}</p>
-                    <p className="text-xs text-white/40 font-mono">{activity.time}</p>
-                  </div>
-                </div>
-              </PermissionWrapper>
-            ))}
-          </CardContent>
-        </Card>
-
         {/* Quick Actions */}
         <Card className="border-white/10">
           <CardHeader>
@@ -180,7 +179,10 @@ const StudentDashboard = ({ studentData }: StudentDashboardProps) => {
               const Icon = action.icon;
               return (
                 <PermissionWrapper key={index} permission={action.permission}>
-                  <div className="flex items-center space-x-4 p-4 rounded-lg border border-white/10 hover:border-role-student/20 hover:bg-white/5 cursor-pointer transition-all duration-300 hover-translate-up">
+                  <div 
+                    onClick={action.action}
+                    className="flex items-center space-x-4 p-4 rounded-lg border border-white/10 hover:border-role-student/20 hover:bg-white/5 cursor-pointer transition-all duration-300 hover-translate-up"
+                  >
                     <div className="p-3 rounded-lg bg-role-student/10">
                       <Icon className="h-5 w-5 text-role-student" />
                     </div>
@@ -194,46 +196,46 @@ const StudentDashboard = ({ studentData }: StudentDashboardProps) => {
             })}
           </CardContent>
         </Card>
-      </div>
 
-      {/* Current Courses Preview */}
-      <PermissionWrapper permission="view_submit_assignments">
-        <Card className="border-white/10">
-          <CardHeader>
-            <CardTitle className="text-2xl font-bold text-card-foreground">Current Courses</CardTitle>
-            <CardDescription>Your enrolled courses this semester</CardDescription>
-          </CardHeader>
-          <CardContent>
-            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
-              {[
-                { name: 'Data Structures & Algorithms', code: 'CS301', instructor: 'Dr. Smith', progress: 75 },
-                { name: 'Database Management Systems', code: 'CS302', instructor: 'Dr. Johnson', progress: 60 },
-                { name: 'Computer Networks', code: 'CS303', instructor: 'Dr. Brown', progress: 80 }
-              ].map((course, index) => (
-                <div key={index} className="p-6 border border-white/10 rounded-lg bg-white/5 hover:border-role-student/20 transition-all duration-300 hover-translate-up">
-                  <div className="flex justify-between items-start mb-4">
-                    <h4 className="font-bold text-card-foreground">{course.name}</h4>
-                    <Badge variant="secondary" className="bg-role-student/10 text-role-student border-role-student/20">{course.code}</Badge>
-                  </div>
-                  <p className="text-sm text-muted-foreground mb-4">{course.instructor}</p>
-                  <div className="space-y-2">
-                    <div className="flex justify-between text-sm">
-                      <span className="text-muted-foreground">Progress</span>
-                      <span className="text-card-foreground font-medium">{course.progress}%</span>
+        {/* Current Courses Preview */}
+        <PermissionWrapper permission="view_submit_assignments">
+          <Card className="border-white/10">
+            <CardHeader>
+              <CardTitle className="text-2xl font-bold text-card-foreground">Current Courses</CardTitle>
+              <CardDescription>Your enrolled courses this semester</CardDescription>
+            </CardHeader>
+            <CardContent>
+              <div className="space-y-4">
+                {enrolledCourses.length > 0 ? (
+                  enrolledCourses.slice(0, 3).map((enrollment: any, index) => (
+                    <div key={index} className="p-4 border border-white/10 rounded-lg bg-white/5 hover:border-role-student/20 transition-all duration-300 hover-translate-up">
+                      <div className="flex justify-between items-start mb-2">
+                        <h4 className="font-bold text-card-foreground">{enrollment.courses?.course_name}</h4>
+                        <Badge variant="secondary" className="bg-role-student/10 text-role-student border-role-student/20">
+                          {enrollment.courses?.course_code}
+                        </Badge>
+                      </div>
+                      <p className="text-sm text-muted-foreground mb-2">
+                        {enrollment.courses?.user_profiles?.first_name} {enrollment.courses?.user_profiles?.last_name}
+                      </p>
+                      <div className="space-y-2">
+                        <div className="flex justify-between text-sm">
+                          <span className="text-muted-foreground">Status</span>
+                          <span className="text-card-foreground font-medium capitalize">{enrollment.status}</span>
+                        </div>
+                      </div>
                     </div>
-                    <div className="w-full bg-white/10 rounded-full h-2">
-                      <div 
-                        className="bg-role-student h-2 rounded-full transition-all duration-500" 
-                        style={{ width: `${course.progress}%` }}
-                      ></div>
-                    </div>
+                  ))
+                ) : (
+                  <div className="text-center py-8">
+                    <p className="text-muted-foreground">No courses enrolled yet</p>
                   </div>
-                </div>
-              ))}
-            </div>
-          </CardContent>
-        </Card>
-      </PermissionWrapper>
+                )}
+              </div>
+            </CardContent>
+          </Card>
+        </PermissionWrapper>
+      </div>
     </div>
   );
 };

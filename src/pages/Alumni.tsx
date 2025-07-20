@@ -3,12 +3,11 @@ import React, { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { toast } from "@/components/ui/use-toast";
 import { Button } from '@/components/ui/button';
-import { Home, Calendar, Users, Heart, FileText, HelpCircle, Bell, Settings, User } from 'lucide-react';
+import { Home, Calendar, Users, FileText, HelpCircle, Bell, Settings, User } from 'lucide-react';
 import SidebarNavigation from '@/components/layout/SidebarNavigation';
 import AlumniDashboard from '@/components/alumni/AlumniDashboard';
 import AlumniEvents from '@/components/alumni/AlumniEvents';
 import AlumniNetworking from '@/components/alumni/AlumniNetworking';
-import AlumniContributions from '@/components/alumni/AlumniContributions';
 import AlumniDocuments from '@/components/alumni/AlumniDocuments';
 import AlumniSupport from '@/components/alumni/AlumniSupport';
 
@@ -76,7 +75,6 @@ const Alumni = () => {
     { id: 'dashboard', label: 'Dashboard', icon: Home },
     { id: 'events', label: 'Events', icon: Calendar },
     { id: 'networking', label: 'Networking', icon: Users },
-    { id: 'contributions', label: 'Contributions', icon: Heart },
     { id: 'documents', label: 'Documents', icon: FileText },
     { id: 'support', label: 'Support', icon: HelpCircle },
   ];
@@ -89,8 +87,6 @@ const Alumni = () => {
         return <AlumniEvents user={user} />;
       case 'networking':
         return <AlumniNetworking user={user} />;
-      case 'contributions':
-        return <AlumniContributions user={user} />;
       case 'documents':
         return <AlumniDocuments user={user} />;
       case 'support':
