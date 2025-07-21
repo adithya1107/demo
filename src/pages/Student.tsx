@@ -1,3 +1,4 @@
+
 import React, { useState, useEffect } from 'react';
 import { 
   BookOpen, 
@@ -12,12 +13,16 @@ import {
   Moon,
   Sun,
   Settings,
-  User
+  User,
+  Menu,
+  X
 } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { toast } from '@/components/ui/use-toast';
 import { useTheme } from '@/contexts/ThemeContext';
-import SidebarNavigation from '@/components/layout/SidebarNavigation';
+import EnhancedSidebarNavigation from '@/components/layout/EnhancedSidebarNavigation';
+import SearchBar from '@/components/layout/SearchBar';
+import BreadcrumbNavigation from '@/components/ui/breadcrumb-navigation';
 import StudentDashboard from '@/components/student/StudentDashboard';
 import ScheduleTimetable from '@/components/student/ScheduleTimetable';
 import AttendanceOverview from '@/components/student/AttendanceOverview';
@@ -28,19 +33,39 @@ import CommunicationCenter from '@/components/student/CommunicationCenter';
 import HostelFacility from '@/components/student/HostelFacility';
 import SupportHelp from '@/components/student/SupportHelp';
 import UserProfile from '@/components/UserProfile';
+import LoadingSkeleton from '@/components/ui/loading-skeleton';
 
 const Student = () => {
   const [activeView, setActiveView] = useState('dashboard');
   const [studentData, setStudentData] = useState<any>(null);
   const [sidebarCollapsed, setSidebarCollapsed] = useState(false);
   const [showProfile, setShowProfile] = useState(false);
+  const [isLoading, setIsLoading] = useState(true);
   const { theme, toggleTheme } = useTheme();
 
   useEffect(() => {
-    const userData = localStorage.getItem('colcord_user');
-    if (userData) {
-      setStudentData(JSON.parse(userData));
-    }
+    const loadStudentData = async () => {
+      setIsLoading(true);
+      try {
+        const userData = localStorage.getItem('colcord_user');
+        if (userData) {
+          // Simulate loading delay for better UX
+          await new Promise(resolve => setTimeout(resolve, 1000));
+          setStudentData(JSON.parse(userData));
+        }
+      } catch (error) {
+        console.error('Error loading student data:', error);
+        toast({
+          title: 'Error',
+          description: 'Failed to load student data. Please try again.',
+          variant: 'destructive'
+        });
+      } finally {
+        setIsLoading(false);
+      }
+    };
+
+    loadStudentData();
   }, []);
 
   const handleNotifications = () => {
@@ -70,27 +95,75 @@ const Student = () => {
     window.location.href = '/';
   };
 
-  if (!studentData) {
+  const handleSearch = (query: string) => {
+    console.log('Searching for:', query);
+  };
+
+  const handleSearchResultSelect = (result: any) => {
+    console.log('Selected result:', result);
+  };
+
+  if (isLoading) {
     return (
-      <div className="min-h-screen flex items-center justify-center">
-        <div className="text-center">
-          <h2 className="text-2xl font-bold mb-2">Access Denied</h2>
-          <p className="text-gray-600">Please log in to access the student portal.</p>
+      <div className="min-h-screen bg-background">
+        <div className="fixed inset-0 bg-[linear-gradient(to_right,rgba(255,255,255,0.02)_1px,transparent_1px),linear-gradient(to_bottom,rgba(255,255,255,0.02)_1px,transparent_1px)] bg-[size:40px_40px] pointer-events-none"></div>
+        <div className="relative z-10">
+          <div className="bg-background/95 backdrop-blur-sm border-b border-white/10 h-16"></div>
+          <div className="flex">
+            <div className="w-64 border-r border-white/10 h-screen"></div>
+            <div className="flex-1 p-6">
+              <LoadingSkeleton variant="dashboard" />
+            </div>
+          </div>
         </div>
       </div>
     );
   }
 
-  const sidebarItems = [
-    { id: 'dashboard', label: 'Dashboard', icon: GraduationCap },
-    { id: 'schedule', label: 'Schedule', icon: Clock },
-    { id: 'attendance', label: 'Attendance', icon: Calendar },
-    { id: 'courses', label: 'Courses', icon: BookOpen },
-    { id: 'assignments', label: 'Assignments', icon: FileText },
-    { id: 'events', label: 'Events', icon: Bell },
-    { id: 'communication', label: 'Communication', icon: MessageSquare },
-    { id: 'hostel', label: 'Hostel', icon: Building },
-    { id: 'support', label: 'Support', icon: HelpCircle },
+  if (!studentData) {
+    return (
+      <div className="min-h-screen flex items-center justify-center bg-background">
+        <div className="text-center space-y-4">
+          <h2 className="text-2xl font-bold">Access Denied</h2>
+          <p className="text-muted-foreground">Please log in to access the student portal.</p>
+          <Button onClick={() => window.location.href = '/'}>
+            Go to Login
+          </Button>
+        </div>
+      </div>
+    );
+  }
+
+  const sidebarGroups = [
+    {
+      id: 'main',
+      label: 'Main',
+      items: [
+        { id: 'dashboard', label: 'Dashboard', icon: GraduationCap, badge: studentData.notifications?.length || 0 },
+        { id: 'schedule', label: 'Schedule', icon: Clock },
+        { id: 'attendance', label: 'Attendance', icon: Calendar, badge: '95%' },
+      ]
+    },
+    {
+      id: 'academic',
+      label: 'Academic',
+      items: [
+        { id: 'courses', label: 'Courses', icon: BookOpen, badge: 6 },
+        { id: 'assignments', label: 'Assignments', icon: FileText, badge: 3 },
+        { id: 'events', label: 'Events', icon: Bell },
+      ]
+    },
+    {
+      id: 'services',
+      label: 'Services',
+      collapsible: true,
+      defaultExpanded: false,
+      items: [
+        { id: 'communication', label: 'Communication', icon: MessageSquare },
+        { id: 'hostel', label: 'Hostel', icon: Building },
+        { id: 'support', label: 'Support', icon: HelpCircle },
+      ]
+    }
   ];
 
   const handleViewChange = (viewId: string) => {
@@ -122,6 +195,21 @@ const Student = () => {
     }
   };
 
+  const getPageTitle = () => {
+    const titles = {
+      dashboard: 'Dashboard',
+      schedule: 'Schedule & Timetable',
+      attendance: 'Attendance Overview',
+      courses: 'Courses & Learning',
+      assignments: 'Assignments',
+      events: 'Events & Calendar',
+      communication: 'Communication Center',
+      hostel: 'Hostel & Facilities',
+      support: 'Support & Help'
+    };
+    return titles[activeView as keyof typeof titles] || 'Dashboard';
+  };
+
   return (
     <div className="min-h-screen bg-background">
       {/* Background Grid */}
@@ -136,37 +224,50 @@ const Student = () => {
                 variant="ghost"
                 size="icon"
                 onClick={() => setSidebarCollapsed(!sidebarCollapsed)}
-                className="h-9 w-9 rounded-lg hover:bg-white/10 transition-colors"
+                className="h-9 w-9 rounded-lg hover:bg-white/10 transition-colors lg:hidden"
               >
-                <span className="sr-only">Toggle sidebar</span>
-                <div className="w-4 h-4 flex flex-col space-y-1">
-                  <div className="w-full h-0.5 bg-foreground"></div>
-                  <div className="w-full h-0.5 bg-foreground"></div>
-                  <div className="w-full h-0.5 bg-foreground"></div>
-                </div>
+                {sidebarCollapsed ? <Menu className="h-4 w-4" /> : <X className="h-4 w-4" />}
               </Button>
-              <h1 className="text-2xl font-bold text-foreground">ColCord</h1>
-              <div className="h-6 w-px bg-white/20"></div>
-              <div className="flex items-center space-x-2">
-                <div className="h-2 w-2 bg-role-student rounded-full animate-pulse-indicator"></div>
-                <span className="text-lg font-medium text-foreground">Student Portal</span>
+              
+              <div className="flex items-center space-x-4">
+                <h1 className="text-2xl font-bold text-foreground">ColCord</h1>
+                <div className="h-6 w-px bg-white/20 hidden sm:block"></div>
+                <div className="flex items-center space-x-2">
+                  <div className="h-2 w-2 bg-role-student rounded-full animate-pulse-indicator"></div>
+                  <span className="text-lg font-medium text-foreground hidden sm:inline">Student Portal</span>
+                </div>
               </div>
             </div>
-            <div className="flex items-center space-x-3">
+
+            {/* Search Bar - Hidden on mobile */}
+            <div className="hidden md:block">
+              <SearchBar 
+                onSearch={handleSearch}
+                onResultSelect={handleSearchResultSelect}
+                className="w-80"
+              />
+            </div>
+            
+            <div className="flex items-center space-x-2">
               <Button 
                 variant="ghost" 
                 size="icon"
                 onClick={handleNotifications}
-                className="h-9 w-9 rounded-lg hover:bg-white/10 transition-colors"
+                className="h-9 w-9 rounded-lg hover:bg-white/10 transition-colors relative"
               >
                 <Bell className="h-5 w-5 text-foreground" />
+                {studentData.notifications?.length > 0 && (
+                  <span className="absolute -top-1 -right-1 h-4 w-4 bg-role-admin text-white text-xs rounded-full flex items-center justify-center">
+                    {studentData.notifications.length}
+                  </span>
+                )}
               </Button>
               
               <Button 
                 variant="ghost" 
                 size="icon"
                 onClick={toggleTheme}
-                className="h-9 w-9 rounded-lg hover:bg-white/10 transition-colors"
+                className="h-9 w-9 rounded-lg hover:bg-white/10 transition-colors hidden sm:flex"
               >
                 {theme === 'dark' ? <Sun className="h-5 w-5 text-foreground" /> : <Moon className="h-5 w-5 text-foreground" />}
               </Button>
@@ -175,7 +276,7 @@ const Student = () => {
                 variant="ghost" 
                 size="icon"
                 onClick={handleSettings}
-                className="h-9 w-9 rounded-lg hover:bg-white/10 transition-colors"
+                className="h-9 w-9 rounded-lg hover:bg-white/10 transition-colors hidden sm:flex"
               >
                 <Settings className="h-5 w-5 text-foreground" />
               </Button>
@@ -195,29 +296,42 @@ const Student = () => {
 
       {/* Main Layout */}
       <div className="relative z-10 flex">
-        {/* Sidebar with data attributes */}
-        <div className="sidebar-container">
-          {sidebarItems.map((item) => (
-            <div 
-              key={item.id} 
-              data-sidebar-item={item.id}
-              style={{ display: 'none' }}
-              onClick={() => handleViewChange(item.id)}
-            />
-          ))}
-          <SidebarNavigation
-            items={sidebarItems}
+        {/* Sidebar */}
+        <div className={`${sidebarCollapsed ? 'hidden lg:block' : 'block'} transition-all duration-300`}>
+          <EnhancedSidebarNavigation
+            groups={sidebarGroups}
             activeItem={activeView}
             onItemClick={handleViewChange}
             userType="student"
             collapsed={sidebarCollapsed}
+            onToggleCollapse={() => setSidebarCollapsed(!sidebarCollapsed)}
           />
         </div>
 
         {/* Main Content */}
-        <div className="flex-1 p-6">
-          {renderContent()}
+        <div className="flex-1 flex flex-col min-h-screen">
+          {/* Breadcrumb and Page Title */}
+          <div className="bg-background/50 backdrop-blur-sm border-b border-white/5 p-4">
+            <div className="space-y-2">
+              <BreadcrumbNavigation />
+              <h2 className="text-2xl font-bold text-foreground">{getPageTitle()}</h2>
+            </div>
+          </div>
+
+          {/* Page Content */}
+          <div className="flex-1 p-6 overflow-y-auto">
+            {renderContent()}
+          </div>
         </div>
+      </div>
+
+      {/* Mobile Search - Show on small screens */}
+      <div className="md:hidden fixed bottom-4 left-4 right-4 z-50">
+        <SearchBar 
+          onSearch={handleSearch}
+          onResultSelect={handleSearchResultSelect}
+          placeholder="Search..."
+        />
       </div>
 
       {/* User Profile Modal */}
