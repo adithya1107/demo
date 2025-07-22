@@ -11,8 +11,7 @@ interface NavigationWrapperProps {
 // Define user type to route mapping
 const USER_ROUTE_MAP = {
   'student': '/student',
-  'faculty': '/teacher',
-  'teacher': '/teacher',
+  'faculty': '/faculty',
   'admin': '/admin',
   'super_admin': '/admin',
   'parent': '/parent',
