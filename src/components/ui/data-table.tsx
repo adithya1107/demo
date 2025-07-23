@@ -1,4 +1,3 @@
-
 import React, { useState, useMemo } from 'react';
 import { ChevronDown, Search, Filter, Download, MoreHorizontal } from 'lucide-react';
 import { Button } from '@/components/ui/button';
@@ -54,8 +53,9 @@ function DataTable<T extends Record<string, any>>({
     if (searchTerm) {
       result = result.filter(item =>
         columns.some(column => {
-          const value = column.key.includes('.') 
-            ? column.key.split('.').reduce((obj, key) => obj?.[key], item)
+          const keyStr = String(column.key);
+          const value = keyStr.includes('.') 
+            ? keyStr.split('.').reduce((obj, key) => obj?.[key], item)
             : item[column.key];
           return value?.toString().toLowerCase().includes(searchTerm.toLowerCase());
         })
@@ -103,8 +103,9 @@ function DataTable<T extends Record<string, any>>({
       columns.map(col => col.header).join(','),
       ...filteredAndSortedData.map(item =>
         columns.map(col => {
-          const value = col.key.includes('.') 
-            ? col.key.split('.').reduce((obj, key) => obj?.[key], item)
+          const keyStr = String(col.key);
+          const value = keyStr.includes('.') 
+            ? keyStr.split('.').reduce((obj, key) => obj?.[key], item)
             : item[col.key];
           return `"${value?.toString().replace(/"/g, '""') || ''}"`;
         }).join(',')
@@ -157,17 +158,17 @@ function DataTable<T extends Record<string, any>>({
             <TableRow>
               {columns.map((column) => (
                 <TableHead 
-                  key={column.key.toString()} 
+                  key={String(column.key)} 
                   style={{ width: column.width }}
                   className={column.sortable ? 'cursor-pointer hover:bg-white/5' : ''}
-                  onClick={() => column.sortable && handleSort(column.key.toString())}
+                  onClick={() => column.sortable && handleSort(String(column.key))}
                 >
                   <div className="flex items-center space-x-2">
                     <span>{column.header}</span>
                     {column.sortable && (
                       <ChevronDown 
                         className={`h-4 w-4 transition-transform ${
-                          sortColumn === column.key 
+                          sortColumn === String(column.key) 
                             ? sortDirection === 'desc' ? 'rotate-180' : '' 
                             : 'opacity-50'
                         }`} 
@@ -194,12 +195,13 @@ function DataTable<T extends Record<string, any>>({
                   onClick={() => onRowClick?.(item)}
                 >
                   {columns.map((column) => {
-                    const value = column.key.includes('.') 
-                      ? column.key.split('.').reduce((obj, key) => obj?.[key], item)
+                    const keyStr = String(column.key);
+                    const value = keyStr.includes('.') 
+                      ? keyStr.split('.').reduce((obj, key) => obj?.[key], item)
                       : item[column.key];
                     
                     return (
-                      <TableCell key={column.key.toString()}>
+                      <TableCell key={String(column.key)}>
                         {column.render ? column.render(value, item) : value}
                       </TableCell>
                     );
