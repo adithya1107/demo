@@ -2668,7 +2668,7 @@ export type Database = {
           last_name: string
           updated_at: string | null
           user_code: string
-          user_type: Database["public"]["Enums"]["user_type_enum"]
+          user_type: Database["public"]["Enums"]["user_type"]
         }
         Insert: {
           college_id: string
@@ -2683,7 +2683,7 @@ export type Database = {
           last_name: string
           updated_at?: string | null
           user_code: string
-          user_type: Database["public"]["Enums"]["user_type_enum"]
+          user_type: Database["public"]["Enums"]["user_type"]
         }
         Update: {
           college_id?: string
@@ -2698,7 +2698,7 @@ export type Database = {
           last_name?: string
           updated_at?: string | null
           user_code?: string
-          user_type?: Database["public"]["Enums"]["user_type_enum"]
+          user_type?: Database["public"]["Enums"]["user_type"]
         }
         Relationships: [
           {
@@ -2902,10 +2902,6 @@ export type Database = {
           email: string
         }[]
       }
-      get_user_email_for_auth: {
-        Args: { college_code: string; user_code: string }
-        Returns: string
-      }
       get_user_permissions: {
         Args: { user_uuid: string }
         Returns: {
@@ -3016,7 +3012,7 @@ export type Database = {
         | "student"
         | "parent"
         | "alumni"
-      user_type_enum:
+      user_type:
         | "student"
         | "faculty"
         | "admin"
@@ -3025,6 +3021,14 @@ export type Database = {
         | "alumni"
         | "super_admin"
         | "teacher"
+      user_type_enum:
+        | "student"
+        | "faculty"
+        | "staff"
+        | "admin"
+        | "parent"
+        | "alumni"
+        | "super_admin"
     }
     CompositeTypes: {
       [_ in never]: never
@@ -3191,7 +3195,7 @@ export const Constants = {
         "parent",
         "alumni",
       ],
-      user_type_enum: [
+      user_type: [
         "student",
         "faculty",
         "admin",
@@ -3200,6 +3204,15 @@ export const Constants = {
         "alumni",
         "super_admin",
         "teacher",
+      ],
+      user_type_enum: [
+        "student",
+        "faculty",
+        "staff",
+        "admin",
+        "parent",
+        "alumni",
+        "super_admin",
       ],
     },
   },
