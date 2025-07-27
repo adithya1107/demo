@@ -1,12 +1,20 @@
 
-import React, { useState } from 'react';
+import React, { useState, useCallback, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { supabase } from '@/integrations/supabase/client';
 import { Button } from "@/components/ui/button"
-import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
 import { toast } from "@/components/ui/use-toast"
-import { HelpCircle, AlertTriangle } from 'lucide-react';
+import { HelpCircle, AlertTriangle, Shield } from 'lucide-react';
+import SecureInput from '@/components/SecureInput';
+import { useSecurityContext } from '@/components/SecurityProvider';
+import { 
+  validateEmail, 
+  validatePassword, 
+  validateUserCode, 
+  validateCollegeCode,
+  sanitizeInput 
+} from '@/utils/security';
 
 interface FormData {
   college_code: string;
@@ -22,7 +30,9 @@ const MultiStepLogin = () => {
   const [collegeName, setCollegeName] = useState('');
   const [loginAttempts, setLoginAttempts] = useState(0);
   const [isBlocked, setIsBlocked] = useState(false);
+  const [passwordErrors, setPasswordErrors] = useState<string[]>([]);
   const navigate = useNavigate();
+  const { rateLimiter, reportSecurityViolation } = useSecurityContext();
 
   const [formData, setFormData] = useState<FormData>({
     college_code: '',
@@ -34,15 +44,64 @@ const MultiStepLogin = () => {
   const MAX_LOGIN_ATTEMPTS = 5;
   const BLOCK_DURATION = 15 * 60 * 1000; // 15 minutes
 
-  const handleChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+  // Check if user is rate limited
+  useEffect(() => {
+    const clientId = localStorage.getItem('client_id') || 
+      (Math.random().toString(36).substr(2, 9) + Date.now().toString(36));
+    
+    if (!localStorage.getItem('client_id')) {
+      localStorage.setItem('client_id', clientId);
+    }
+    
+    const remaining = rateLimiter.getRemainingAttempts(clientId);
+    setIsBlocked(remaining <= 0);
+  }, [rateLimiter]);
+
+  const handleSecurityViolation = useCallback((violation: string) => {
+    reportSecurityViolation(violation, {
+      component: 'MultiStepLogin',
+      userAgent: navigator.userAgent,
+      timestamp: new Date().toISOString()
+    });
+  }, [reportSecurityViolation]);
+
+  const handleChange = useCallback((e: React.ChangeEvent<HTMLInputElement>) => {
     const { name, value } = e.target;
     
-    // Input sanitization to prevent XSS
-    const sanitizedValue = value.replace(/<script\b[^<]*(?:(?!<\/script>)<[^<]*)*<\/script>/gi, '');
+    // Additional validation based on field
+    let isValid = true;
+    let sanitizedValue = value;
+
+    switch (name) {
+      case 'college_code':
+        isValid = validateCollegeCode(value);
+        sanitizedValue = sanitizeInput(value, 10).toUpperCase();
+        break;
+      case 'user_code':
+        isValid = validateUserCode(value);
+        sanitizedValue = sanitizeInput(value, 20).toUpperCase();
+        break;
+      case 'email':
+        isValid = validateEmail(value);
+        sanitizedValue = sanitizeInput(value, 320).toLowerCase();
+        break;
+      case 'password':
+        const validation = validatePassword(value);
+        setPasswordErrors(validation.errors);
+        sanitizedValue = value; // Don't sanitize password, but validate it
+        break;
+      default:
+        sanitizedValue = sanitizeInput(value, 100);
+    }
+
+    if (!isValid && name !== 'password') {
+      handleSecurityViolation(`Invalid ${name} format`);
+      return;
+    }
     
     setFormData(prev => ({ ...prev, [name]: sanitizedValue }));
     setError(''); // Clear error when user types
-  };
+  }, [handleSecurityViolation]);
 
   const handleCollegeValidation = async () => {
     if (!formData.college_code.trim()) {
@@ -50,9 +109,16 @@ const MultiStepLogin = () => {
       return;
     }
 
-    // Input validation - only allow alphanumeric characters
-    if (!/^[a-zA-Z0-9]+$/.test(formData.college_code)) {
-      setError('College code can only contain letters and numbers');
+    if (!validateCollegeCode(formData.college_code)) {
+      setError('College code format is invalid');
+      handleSecurityViolation('Invalid college code format');
+      return;
+    }
+
+    const clientId = localStorage.getItem('client_id') || 'unknown';
+    if (!rateLimiter.isAllowed(clientId)) {
+      setIsBlocked(true);
+      setError('Too many attempts. Please try again later.');
       return;
     }
 
@@ -63,7 +129,7 @@ const MultiStepLogin = () => {
       const { data, error } = await supabase
         .from('colleges')
         .select('id, name, code')
-        .eq('code', formData.college_code.toUpperCase())
+        .eq('code', formData.college_code)
         .single();
 
       if (error || !data) {
@@ -89,6 +155,7 @@ const MultiStepLogin = () => {
       setError('Unable to validate college code. Please try again.');
       setCollegeValidated(false);
       setCollegeName('');
+      handleSecurityViolation('College validation failed');
     } finally {
       setIsLoading(false);
     }
@@ -97,8 +164,11 @@ const MultiStepLogin = () => {
   const handleLogin = async (e: React.FormEvent) => {
     e.preventDefault();
     
-    // Check if user is blocked due to too many attempts
-    if (isBlocked) {
+    const clientId = localStorage.getItem('client_id') || 'unknown';
+    
+    // Check rate limiting
+    if (!rateLimiter.isAllowed(clientId)) {
+      setIsBlocked(true);
       setError('Account temporarily blocked due to multiple failed login attempts. Please try again later.');
       return;
     }
@@ -114,16 +184,15 @@ const MultiStepLogin = () => {
       return;
     }
 
-    // Email format validation
-    const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
-    if (!emailRegex.test(formData.email)) {
+    if (!validateEmail(formData.email)) {
       setError('Please enter a valid email address');
+      handleSecurityViolation('Invalid email format in login');
       return;
     }
 
-    // Password strength validation (minimum requirements)
-    if (formData.password.length < 6) {
-      setError('Password must be at least 6 characters long');
+    const passwordValidation = validatePassword(formData.password);
+    if (!passwordValidation.isValid) {
+      setError('Password does not meet security requirements');
       return;
     }
 
@@ -199,16 +268,18 @@ const MultiStepLogin = () => {
       const { data: college } = await supabase
         .from('colleges')
         .select('id')
-        .eq('code', formData.college_code.toUpperCase())
+        .eq('code', formData.college_code)
         .single();
 
       if (!college || profile.college_id !== college.id) {
         throw new Error('User does not belong to the specified college');
+        handleSecurityViolation('College mismatch during login');
       }
 
       // Reset login attempts on successful login
       setLoginAttempts(0);
       setIsBlocked(false);
+      rateLimiter.reset(clientId);
 
       console.log('Login successful for:', profile.first_name, profile.last_name);
 
@@ -256,8 +327,11 @@ const MultiStepLogin = () => {
   return (
     <div className="bg-card rounded-lg shadow-md p-8 space-y-6 border border-white/10">
       <div className="text-center mb-6">
-        <h2 className="text-2xl font-bold text-foreground mb-2">College Access</h2>
-        <p className="text-muted-foreground">Secure login to your account</p>
+        <div className="flex items-center justify-center mb-2">
+          <Shield className="w-6 h-6 text-blue-600 mr-2" />
+          <h2 className="text-2xl font-bold text-foreground">Secure College Access</h2>
+        </div>
+        <p className="text-muted-foreground">Enhanced security login to your account</p>
         {collegeValidated && collegeName && (
           <p className="text-sm text-green-600 mt-2">✓ {collegeName}</p>
         )}
@@ -282,7 +356,7 @@ const MultiStepLogin = () => {
         <div>
           <Label htmlFor="college_code">College Code</Label>
           <div className="relative">
-            <Input
+            <SecureInput
               type="text"
               id="college_code"
               name="college_code"
@@ -293,6 +367,8 @@ const MultiStepLogin = () => {
               className={collegeValidated ? "pr-20 border-green-500" : "pr-20"}
               disabled={collegeValidated}
               maxLength={10}
+              allowedChars={/[A-Z0-9]/}
+              onSecurityViolation={handleSecurityViolation}
             />
             {!collegeValidated ? (
               <Button
@@ -327,7 +403,7 @@ const MultiStepLogin = () => {
           <>
             <div>
               <Label htmlFor="user_code">User Code</Label>
-              <Input
+              <SecureInput
                 type="text"
                 id="user_code"
                 name="user_code"
@@ -336,12 +412,14 @@ const MultiStepLogin = () => {
                 placeholder="Enter your user code (e.g., ANI0002)"
                 required
                 maxLength={20}
+                allowedChars={/[A-Z0-9]/}
+                onSecurityViolation={handleSecurityViolation}
               />
             </div>
 
             <div>
               <Label htmlFor="email">Email</Label>
-              <Input
+              <SecureInput
                 type="email"
                 id="email"
                 name="email"
@@ -349,13 +427,14 @@ const MultiStepLogin = () => {
                 onChange={handleChange}
                 placeholder="Enter your email address"
                 required
-                maxLength={100}
+                maxLength={320}
+                onSecurityViolation={handleSecurityViolation}
               />
             </div>
 
             <div>
               <Label htmlFor="password">Password</Label>
-              <Input
+              <SecureInput
                 type="password"
                 id="password"
                 name="password"
@@ -363,15 +442,25 @@ const MultiStepLogin = () => {
                 onChange={handleChange}
                 placeholder="Enter your password"
                 required
-                minLength={6}
-                maxLength={100}
+                minLength={8}
+                maxLength={128}
+                onSecurityViolation={handleSecurityViolation}
               />
+              {passwordErrors.length > 0 && (
+                <div className="text-xs text-red-600 mt-1">
+                  <ul className="list-disc list-inside">
+                    {passwordErrors.map((error, index) => (
+                      <li key={index}>{error}</li>
+                    ))}
+                  </ul>
+                </div>
+              )}
             </div>
 
             <Button 
               type="submit" 
               className="w-full" 
-              disabled={isLoading || isBlocked}
+              disabled={isLoading || isBlocked || passwordErrors.length > 0}
             >
               {isLoading ? (
                 <div className="flex items-center gap-2">
