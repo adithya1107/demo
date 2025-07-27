@@ -42,7 +42,8 @@ export const useUserProfile = () => {
           setError(error.message);
           setProfile(null);
         } else {
-          setProfile(data);
+          // Type assertion to ensure compatibility
+          setProfile(data as UserProfile);
           setError(null);
         }
       } catch (err) {
@@ -65,7 +66,7 @@ export const useUserProfile = () => {
     try {
       const { data, error } = await supabase
         .from('user_profiles')
-        .update(updates)
+        .update(updates as any) // Type assertion for database compatibility
         .eq('id', user.id)
         .select()
         .single();
@@ -74,7 +75,8 @@ export const useUserProfile = () => {
         return { error: error.message };
       }
 
-      setProfile(data);
+      // Type assertion to ensure compatibility
+      setProfile(data as UserProfile);
       return { data };
     } catch (err) {
       return { error: 'Failed to update profile' };
