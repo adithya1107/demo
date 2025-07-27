@@ -1,4 +1,3 @@
-
 import React from 'react';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
@@ -9,73 +8,73 @@ const SystemArchitecture: React.FC = () => {
     {
       id: 1,
       title: 'Core Infrastructure & Fixes',
-      status: 'in-progress',
+      status: 'in-progress' as const,
       items: [
-        { name: 'Fix PermissionWrapper', status: 'completed' },
-        { name: 'Refactor large components', status: 'in-progress' },
-        { name: 'Database optimization', status: 'pending' },
-        { name: 'API gateway setup', status: 'pending' },
-        { name: 'Enhanced security', status: 'completed' }
+        { name: 'Fix PermissionWrapper', status: 'completed' as const },
+        { name: 'Refactor large components', status: 'in-progress' as const },
+        { name: 'Database optimization', status: 'pending' as const },
+        { name: 'API gateway setup', status: 'pending' as const },
+        { name: 'Enhanced security', status: 'completed' as const }
       ]
     },
     {
       id: 2,
       title: 'Student Information System (SIS)',
-      status: 'pending',
+      status: 'pending' as const,
       items: [
-        { name: 'Student profile enhancement', status: 'pending' },
-        { name: 'Faculty profile enhancement', status: 'pending' },
-        { name: 'Academic records management', status: 'pending' },
-        { name: 'Enrollment management', status: 'pending' },
-        { name: 'Transcript generation', status: 'pending' }
+        { name: 'Student profile enhancement', status: 'pending' as const },
+        { name: 'Faculty profile enhancement', status: 'pending' as const },
+        { name: 'Academic records management', status: 'pending' as const },
+        { name: 'Enrollment management', status: 'pending' as const },
+        { name: 'Transcript generation', status: 'pending' as const }
       ]
     },
     {
       id: 3,
       title: 'Learning Management System (LMS)',
-      status: 'pending',
+      status: 'pending' as const,
       items: [
-        { name: 'Course content management', status: 'pending' },
-        { name: 'Assignment & quiz system', status: 'pending' },
-        { name: 'Discussion forums', status: 'pending' },
-        { name: 'Progress tracking', status: 'pending' },
-        { name: 'Learning analytics', status: 'pending' }
+        { name: 'Course content management', status: 'pending' as const },
+        { name: 'Assignment & quiz system', status: 'pending' as const },
+        { name: 'Discussion forums', status: 'pending' as const },
+        { name: 'Progress tracking', status: 'pending' as const },
+        { name: 'Learning analytics', status: 'pending' as const }
       ]
     },
     {
       id: 4,
       title: 'Attendance & Timetable Integration',
-      status: 'pending',
+      status: 'pending' as const,
       items: [
-        { name: 'Smart scheduling', status: 'pending' },
-        { name: 'Attendance integration', status: 'pending' },
-        { name: 'Timetable management', status: 'pending' },
-        { name: 'Reporting system', status: 'pending' },
-        { name: 'QR code attendance', status: 'pending' }
+        { name: 'Smart scheduling', status: 'pending' as const },
+        { name: 'Attendance integration', status: 'pending' as const },
+        { name: 'Timetable management', status: 'pending' as const },
+        { name: 'Reporting system', status: 'pending' as const },
+        { name: 'QR code attendance', status: 'pending' as const }
       ]
     },
     {
       id: 5,
       title: 'Examination & Evaluation',
-      status: 'pending',
+      status: 'pending' as const,
       items: [
-        { name: 'Exam scheduling', status: 'pending' },
-        { name: 'Hall ticket generation', status: 'pending' },
-        { name: 'Online examination', status: 'pending' },
-        { name: 'Evaluation management', status: 'pending' },
-        { name: 'Result publication', status: 'pending' }
+        { name: 'Exam scheduling', status: 'pending' as const },
+        { name: 'Hall ticket generation', status: 'pending' as const },
+        { name: 'Online examination', status: 'pending' as const },
+        { name: 'Evaluation management', status: 'pending' as const },
+        { name: 'Result publication', status: 'pending' as const }
       ]
     },
     {
       id: 6,
       title: 'Enhanced Communication',
-      status: 'pending',
+      status: 'pending' as const,
       items: [
-        { name: 'Multi-channel communication', status: 'pending' },
-        { name: 'Real-time notifications', status: 'pending' },
-        { name: 'Announcement management', status: 'pending' },
-        { name: 'Parent-teacher communication', status: 'pending' },
-        { name: 'SMS/Email integration', status: 'pending' }
+        { name: 'Multi-channel communication', status: 'pending' as const },
+        { name: 'Real-time notifications', status: 'pending' as const },
+        { name: 'Announcement management', status: 'pending' as const },
+        { name: 'Parent-teacher communication', status: 'pending' as const },
+        { name: 'SMS/Email integration', status: 'pending' as const }
       ]
     }
   ];
@@ -94,12 +93,14 @@ const SystemArchitecture: React.FC = () => {
   };
 
   const getStatusBadge = (status: string) => {
-    const variants = {
+    const variants: Record<string, "default" | "secondary" | "outline" | "destructive"> = {
       'completed': 'default',
       'in-progress': 'secondary',
       'pending': 'outline'
     };
-    return <Badge variant={variants[status as keyof typeof variants] || 'destructive'}>{status}</Badge>;
+    
+    const variant = variants[status] || 'destructive';
+    return <Badge variant={variant}>{status}</Badge>;
   };
 
   return (
@@ -149,7 +150,7 @@ const SystemArchitecture: React.FC = () => {
               - Security enhancements with comprehensive logging
             </p>
           </div>
-          
+
           <div>
             <h4 className="font-semibold mb-2">Next Steps</h4>
             <p className="text-sm text-muted-foreground">
