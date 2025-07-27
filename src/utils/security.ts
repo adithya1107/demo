@@ -1,24 +1,51 @@
-
 // Security utilities for input sanitization and validation
-import DOMPurify from 'dompurify';
 
 // XSS Prevention utilities
 export const sanitizeHtml = (dirty: string): string => {
-  if (typeof window !== 'undefined' && DOMPurify) {
-    return DOMPurify.sanitize(dirty);
+  if (typeof dirty !== 'string') {
+    return '';
   }
-  // Server-side fallback - basic HTML entity encoding
+
+  // Comprehensive HTML entity encoding
   return dirty
     .replace(/&/g, '&amp;')
     .replace(/</g, '&lt;')
     .replace(/>/g, '&gt;')
     .replace(/"/g, '&quot;')
     .replace(/'/g, '&#x27;')
-    .replace(/\//g, '&#x2F;');
+    .replace(/\//g, '&#x2F;')
+    .replace(/\\/g, '&#x5C;')
+    .replace(/`/g, '&#x60;')
+    .replace(/=/g, '&#x3D;');
+};
+
+// Alternative HTML sanitizer for more complex needs
+export const stripHtml = (html: string): string => {
+  if (typeof html !== 'string') {
+    return '';
+  }
+  
+  // Remove HTML tags and decode entities
+  return html
+    .replace(/<[^>]*>/g, '') // Remove HTML tags
+    .replace(/&nbsp;/g, ' ')
+    .replace(/&amp;/g, '&')
+    .replace(/&lt;/g, '<')
+    .replace(/&gt;/g, '>')
+    .replace(/&quot;/g, '"')
+    .replace(/&#x27;/g, "'")
+    .replace(/&#x2F;/g, '/')
+    .replace(/&#x5C;/g, '\\')
+    .replace(/&#x60;/g, '`')
+    .replace(/&#x3D;/g, '=');
 };
 
 // CSS sanitization for dynamic styles
 export const sanitizeCSS = (cssValue: string): string => {
+  if (typeof cssValue !== 'string') {
+    return '#000000';
+  }
+
   // Remove potentially dangerous CSS functions and properties
   const dangerousPatterns = [
     /javascript:/gi,
@@ -46,8 +73,8 @@ export const sanitizeCSS = (cssValue: string): string => {
     sanitized = sanitized.replace(pattern, '');
   });
 
-  // Only allow hex colors, rgb/rgba, and named colors
-  const colorPattern = /^(#([0-9a-f]{3}|[0-9a-f]{6})|rgb\((\d{1,3},\s*){2}\d{1,3}\)|rgba\((\d{1,3},\s*){3}[01]?\.?\d*\)|[a-z]+)$/i;
+  // Only allow hex colors, rgb/rgba, hsl/hsla, and named colors
+  const colorPattern = /^(#([0-9a-f]{3}|[0-9a-f]{6}|[0-9a-f]{8})|rgb\((\d{1,3},\s*){2}\d{1,3}\)|rgba\((\d{1,3},\s*){3}[01]?\.?\d*\)|hsl\(\d{1,3},\s*\d{1,3}%,\s*\d{1,3}%\)|hsla\(\d{1,3},\s*\d{1,3}%,\s*\d{1,3}%,\s*[01]?\.?\d*\)|transparent|inherit|initial|unset|[a-z]+)$/i;
   
   if (!colorPattern.test(sanitized.trim())) {
     return '#000000'; // Default to black if invalid
@@ -58,6 +85,10 @@ export const sanitizeCSS = (cssValue: string): string => {
 
 // Input validation utilities
 export const validateEmail = (email: string): boolean => {
+  if (typeof email !== 'string') {
+    return false;
+  }
+  
   const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
   return emailRegex.test(email) && email.length <= 320; // RFC 5321 limit
 };
@@ -67,6 +98,11 @@ export const validatePassword = (password: string): {
   errors: string[];
 } => {
   const errors: string[] = [];
+  
+  if (typeof password !== 'string') {
+    errors.push('Password must be a string');
+    return { isValid: false, errors };
+  }
   
   if (password.length < 8) {
     errors.push('Password must be at least 8 characters long');
@@ -99,12 +135,20 @@ export const validatePassword = (password: string): {
 };
 
 export const validateUserCode = (userCode: string): boolean => {
+  if (typeof userCode !== 'string') {
+    return false;
+  }
+  
   // User code should be alphanumeric and 6-12 characters
   const userCodeRegex = /^[a-zA-Z0-9]{6,12}$/;
   return userCodeRegex.test(userCode);
 };
 
 export const validateCollegeCode = (collegeCode: string): boolean => {
+  if (typeof collegeCode !== 'string') {
+    return false;
+  }
+  
   // College code should be alphanumeric and 3-8 characters
   const collegeCodeRegex = /^[a-zA-Z0-9]{3,8}$/;
   return collegeCodeRegex.test(collegeCode);
@@ -171,4 +215,30 @@ export class RateLimiter {
   }
 }
 
-export const CSP_NONCE = 'csp-nonce-' + Math.random().toString(36).substr(2, 9);
+// Generate a secure random nonce for CSP
+export const generateCSPNonce = (): string => {
+  const array = new Uint8Array(16);
+  if (typeof window !== 'undefined' && window.crypto) {
+    window.crypto.getRandomValues(array);
+  } else if (typeof require !== 'undefined') {
+    // Node.js environment
+    try {
+      const crypto = require('crypto');
+      return crypto.randomBytes(16).toString('base64');
+    } catch {
+      // Fallback for environments without crypto
+      for (let i = 0; i < array.length; i++) {
+        array[i] = Math.floor(Math.random() * 256);
+      }
+    }
+  } else {
+    // Fallback for environments without crypto
+    for (let i = 0; i < array.length; i++) {
+      array[i] = Math.floor(Math.random() * 256);
+    }
+  }
+  
+  return btoa(String.fromCharCode(...array));
+};
+
+export const CSP_NONCE = generateCSPNonce();
