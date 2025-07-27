@@ -1,4 +1,3 @@
-
 import React from 'react';
 import { usePermissions } from '@/hooks/usePermissions';
 import { Card, CardContent } from '@/components/ui/card';
@@ -19,7 +18,7 @@ const PermissionWrapper = ({
   fallback,
   showFallback = false 
 }: PermissionWrapperProps) => {
-  const { permissions, loading, user } = usePermissions();
+  const { permissions, loading, userType } = usePermissions();
 
   React.useEffect(() => {
     if (!loading && !permissions[permission]) {
@@ -28,7 +27,7 @@ const PermissionWrapper = ({
         'unauthorized_access_attempt',
         `User attempted to access ${permission} without proper permissions`,
         'security',
-        user?.id
+        undefined // Since we don't have user.id, pass undefined
       );
       
       // Report as potential privilege escalation
@@ -36,14 +35,14 @@ const PermissionWrapper = ({
         type: 'privilege_escalation',
         severity: 'medium',
         description: `Unauthorized access attempt to ${permission}`,
-        userId: user?.id,
+        userId: undefined, // Since we don't have user.id, pass undefined
         metadata: {
           permission,
-          userType: user?.user_type
+          userType: userType
         }
       });
     }
-  }, [loading, permissions, permission, user]);
+  }, [loading, permissions, permission, userType]);
 
   if (loading) {
     return (
