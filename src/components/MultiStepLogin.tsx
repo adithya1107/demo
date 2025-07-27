@@ -1,4 +1,3 @@
-
 import React, { useState, useCallback, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { supabase } from '@/integrations/supabase/client';
@@ -8,6 +7,7 @@ import { toast } from "@/components/ui/use-toast"
 import { HelpCircle, AlertTriangle, Shield } from 'lucide-react';
 import SecureInput from '@/components/SecureInput';
 import { useSecurityContext } from '@/components/SecurityProvider';
+import { validateSessionIntegrity } from '@/utils/sessionSecurity';
 import { 
   validateEmail, 
   validatePassword, 
@@ -43,6 +43,19 @@ const MultiStepLogin = () => {
 
   const MAX_LOGIN_ATTEMPTS = 5;
   const BLOCK_DURATION = 15 * 60 * 1000; // 15 minutes
+
+  // Enhanced session validation check
+  useEffect(() => {
+    const checkSession = async () => {
+      const isValid = await validateSessionIntegrity();
+      if (isValid) {
+        // User already has valid session, redirect to dashboard
+        navigate('/dashboard', { replace: true });
+      }
+    };
+    
+    checkSession();
+  }, [navigate]);
 
   // Check if user is rate limited
   useEffect(() => {
@@ -166,10 +179,11 @@ const MultiStepLogin = () => {
     
     const clientId = localStorage.getItem('client_id') || 'unknown';
     
-    // Check rate limiting
+    // Enhanced rate limiting check
     if (!rateLimiter.isAllowed(clientId)) {
       setIsBlocked(true);
       setError('Account temporarily blocked due to multiple failed login attempts. Please try again later.');
+      reportSecurityViolation('Rate limit exceeded during login', { clientId });
       return;
     }
 
@@ -200,7 +214,17 @@ const MultiStepLogin = () => {
     setError('');
 
     try {
-      console.log('Attempting login with enhanced security...');
+      console.log('Attempting secure login with enhanced validation...');
+      
+      // Enhanced security: Log login attempt
+      reportSecurityViolation('Login attempt', {
+        email: formData.email,
+        college_code: formData.college_code,
+        user_code: formData.user_code,
+        timestamp: new Date().toISOString(),
+        userAgent: navigator.userAgent,
+        clientId
+      });
       
       // Sign in with Supabase Auth with enhanced security
       const { data: authData, error: authError } = await supabase.auth.signInWithPassword({
@@ -211,9 +235,16 @@ const MultiStepLogin = () => {
       if (authError) {
         console.error('Auth error:', authError);
         
-        // Handle specific auth errors
+        // Enhanced error handling with security logging
         if (authError.message.includes('Invalid login credentials')) {
           setLoginAttempts(prev => prev + 1);
+          
+          reportSecurityViolation('Failed login attempt', {
+            email: formData.email,
+            college_code: formData.college_code,
+            attempt_number: loginAttempts + 1,
+            error: authError.message
+          });
           
           if (loginAttempts + 1 >= MAX_LOGIN_ATTEMPTS) {
             setIsBlocked(true);
@@ -241,9 +272,9 @@ const MultiStepLogin = () => {
         throw new Error('Login failed - no user returned');
       }
 
-      console.log('Auth successful, validating user profile...');
+      console.log('Auth successful, validating user profile with enhanced security...');
 
-      // Enhanced user profile validation
+      // Enhanced user profile validation with integrity checks
       const { data: profile, error: profileError } = await supabase
         .from('user_profiles')
         .select('*')
@@ -252,28 +283,53 @@ const MultiStepLogin = () => {
 
       if (profileError) {
         console.error('Profile error:', profileError);
+        reportSecurityViolation('Profile validation failed', {
+          user_id: authData.user.id,
+          error: profileError.message
+        });
         throw new Error('Unable to fetch user profile');
       }
 
       if (!profile) {
+        reportSecurityViolation('User profile not found', {
+          user_id: authData.user.id
+        });
         throw new Error('User profile not found');
       }
 
-      // Verify user is active
+      // Enhanced security checks
       if (!profile.is_active) {
+        reportSecurityViolation('Inactive user login attempt', {
+          user_id: authData.user.id,
+          profile
+        });
         throw new Error('User account is inactive. Please contact support.');
       }
 
-      // Verify user belongs to the specified college
+      // Verify user belongs to the specified college with enhanced validation
       const { data: college } = await supabase
         .from('colleges')
-        .select('id')
+        .select('id, name, code')
         .eq('code', formData.college_code)
         .single();
 
       if (!college || profile.college_id !== college.id) {
+        reportSecurityViolation('College mismatch during login', {
+          user_id: authData.user.id,
+          provided_college: formData.college_code,
+          user_college_id: profile.college_id,
+          college_id: college?.id
+        });
         throw new Error('User does not belong to the specified college');
-        handleSecurityViolation('College mismatch during login');
+      }
+
+      // Enhanced session security: Validate session integrity
+      const sessionValid = await validateSessionIntegrity();
+      if (!sessionValid) {
+        reportSecurityViolation('Session validation failed after login', {
+          user_id: authData.user.id
+        });
+        throw new Error('Session validation failed');
       }
 
       // Reset login attempts on successful login
@@ -281,7 +337,14 @@ const MultiStepLogin = () => {
       setIsBlocked(false);
       rateLimiter.reset(clientId);
 
-      console.log('Login successful for:', profile.first_name, profile.last_name);
+      // Log successful login
+      reportSecurityViolation('Successful login', {
+        user_id: authData.user.id,
+        college_code: formData.college_code,
+        user_type: profile.user_type
+      });
+
+      console.log('Secure login successful for:', profile.first_name, profile.last_name);
 
       toast({
         title: 'Login Successful',
@@ -291,6 +354,14 @@ const MultiStepLogin = () => {
       // The NavigationWrapper will handle the redirect based on user type
     } catch (error: any) {
       console.error('Login error:', error);
+      
+      // Enhanced error logging
+      reportSecurityViolation('Login error', {
+        error: error.message,
+        stack: error.stack,
+        email: formData.email,
+        college_code: formData.college_code
+      });
       
       let errorMessage = 'Login failed. Please check your credentials.';
       

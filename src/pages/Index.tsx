@@ -7,6 +7,8 @@ import { Button } from '@/components/ui/button';
 import { Moon, Sun } from 'lucide-react';
 import { useTheme } from '@/contexts/ThemeContext';
 import MultiStepLogin from '@/components/MultiStepLogin';
+import SessionTimeout from '@/components/SessionTimeout';
+import { validateSessionIntegrity } from '@/utils/sessionSecurity';
 
 const Index = () => {
   const navigate = useNavigate();
@@ -17,25 +19,59 @@ const Index = () => {
   useEffect(() => {
     let mounted = true;
 
-    // Set up auth state listener
+    const checkAuthState = async () => {
+      try {
+        // Enhanced session validation
+        const sessionValid = await validateSessionIntegrity();
+        
+        if (sessionValid) {
+          const { data: { session } } = await supabase.auth.getSession();
+          if (mounted && session) {
+            setSession(session);
+            // User has valid session, NavigationWrapper will handle redirect
+          }
+        }
+      } catch (error) {
+        console.error('Session validation error:', error);
+      } finally {
+        if (mounted) {
+          setLoading(false);
+        }
+      }
+    };
+
+    // Set up auth state listener with enhanced security
     const { data: { subscription } } = supabase.auth.onAuthStateChange(
-      (event, session) => {
+      async (event, session) => {
         if (!mounted) return;
         
         console.log('Index: Auth state changed:', event, session?.user?.email);
-        setSession(session);
+        
+        if (event === 'SIGNED_OUT') {
+          localStorage.clear();
+          sessionStorage.clear();
+          setSession(null);
+          setLoading(false);
+          return;
+        }
+        
+        if (session) {
+          // Validate session integrity on auth state change
+          const sessionValid = await validateSessionIntegrity();
+          if (sessionValid) {
+            setSession(session);
+          } else {
+            setSession(null);
+          }
+        } else {
+          setSession(null);
+        }
+        
         setLoading(false);
       }
     );
 
-    // Check for existing session
-    supabase.auth.getSession().then(({ data: { session } }) => {
-      if (!mounted) return;
-      
-      console.log('Index: Initial session check:', session?.user?.email);
-      setSession(session);
-      setLoading(false);
-    });
+    checkAuthState();
 
     return () => {
       mounted = false;
@@ -52,10 +88,11 @@ const Index = () => {
     );
   }
 
-  // If user is authenticated, NavigationWrapper will redirect them
-  // This page should only show for unauthenticated users
   return (
     <div className="min-h-screen bg-background">
+      {/* Enhanced security: Session timeout for authenticated users */}
+      {session && <SessionTimeout />}
+      
       {/* Industrial Grid Background */}
       <div className="fixed inset-0 bg-[linear-gradient(to_right,rgba(255,255,255,0.02)_1px,transparent_1px),linear-gradient(to_bottom,rgba(255,255,255,0.02)_1px,transparent_1px)] bg-[size:40px_40px] pointer-events-none" />
       
