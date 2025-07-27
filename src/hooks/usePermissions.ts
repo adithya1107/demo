@@ -1,6 +1,8 @@
 
 import { useState, useEffect } from 'react';
 import { supabase } from '@/integrations/supabase/client';
+import { useAuth } from './useAuth';
+import { useUserProfile } from './useUserProfile';
 
 export interface UserPermissions {
   // Dashboard & Profile
@@ -81,7 +83,7 @@ const PERMISSION_SETS = {
     facility_requests: true,
     support_tickets: true,
   },
-  teacher: {
+  faculty: {
     view_personal_dashboard: true,
     view_college_branding: true,
     view_submit_assignments: true,
@@ -116,54 +118,64 @@ const PERMISSION_SETS = {
     alumni_events: true,
     support_tickets: true,
   },
+  admin: {
+    view_personal_dashboard: true,
+    view_college_branding: true,
+    view_submit_assignments: true,
+    review_assignments: true,
+    view_grades: true,
+    assign_grades: true,
+    view_child_grades: true,
+    mark_attendance: true,
+    view_attendance: true,
+    view_child_attendance: true,
+    upload_materials: true,
+    join_forums: true,
+    view_fees: true,
+    review_fees: true,
+    view_child_fees: true,
+    make_payments: true,
+    make_child_payments: true,
+    request_certificates: true,
+    apply_hostel: true,
+    facility_requests: true,
+    support_tickets: true,
+    alumni_contributions: true,
+    alumni_events: true,
+  },
 };
 
 export const usePermissions = () => {
+  const { user } = useAuth();
+  const { profile, loading: profileLoading } = useUserProfile();
   const [permissions, setPermissions] = useState<UserPermissions>(DEFAULT_PERMISSIONS);
-  const [userType, setUserType] = useState<string | null>(null);
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
     const loadUserPermissions = async () => {
+      if (!user || !profile) {
+        setPermissions(DEFAULT_PERMISSIONS);
+        setLoading(false);
+        return;
+      }
+
       try {
-        // Get authenticated user with server-side validation
-        const { data: { user }, error: userError } = await supabase.auth.getUser();
-        
-        if (userError || !user) {
-          console.error('User authentication error:', userError);
-          setLoading(false);
-          return;
-        }
-
-        // Get user profile with server-side validation
-        const { data: profile, error: profileError } = await supabase
-          .from('user_profiles')
-          .select('user_type, college_id, is_active')
-          .eq('id', user.id)
-          .single();
-
-        if (profileError || !profile) {
-          console.error('Profile fetch error:', profileError);
-          setLoading(false);
-          return;
-        }
-
         // Verify user is active
         if (!profile.is_active) {
           console.error('User account is inactive');
+          setPermissions(DEFAULT_PERMISSIONS);
           setLoading(false);
           return;
         }
 
-        const userTypeKey = profile.user_type === 'faculty' ? 'teacher' : profile.user_type;
-        setUserType(profile.user_type);
-
-        // Get permissions for user type with server-side validation
+        const userTypeKey = profile.user_type === 'faculty' ? 'faculty' : profile.user_type;
+        
+        // Get permissions for user type
         const userPermissions = PERMISSION_SETS[userTypeKey as keyof typeof PERMISSION_SETS];
         
         if (userPermissions) {
           // For admin users, get additional permissions from database
-          if (profile.user_type === 'admin' || profile.user_type === 'super_admin') {
+          if (profile.user_type === 'admin') {
             try {
               const { data: adminRoles, error: rolesError } = await supabase
                 .from('admin_roles')
@@ -219,25 +231,16 @@ export const usePermissions = () => {
       }
     };
 
-    loadUserPermissions();
+    if (!profileLoading) {
+      loadUserPermissions();
+    }
+  }, [user, profile, profileLoading]);
 
-    // Listen for auth changes and reload permissions
-    const { data: { subscription } } = supabase.auth.onAuthStateChange(
-      (event, session) => {
-        if (event === 'SIGNED_IN' && session) {
-          loadUserPermissions();
-        } else if (event === 'SIGNED_OUT') {
-          setPermissions(DEFAULT_PERMISSIONS);
-          setUserType(null);
-          setLoading(false);
-        }
-      }
-    );
-
-    return () => {
-      subscription.unsubscribe();
-    };
-  }, []);
-
-  return { permissions, userType, loading };
+  return { 
+    permissions, 
+    userType: profile?.user_type, 
+    loading: loading || profileLoading,
+    userId: user?.id,
+    profile
+  };
 };

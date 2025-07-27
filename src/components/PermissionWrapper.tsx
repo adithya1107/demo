@@ -1,7 +1,8 @@
+
 import React from 'react';
 import { usePermissions } from '@/hooks/usePermissions';
 import { Card, CardContent } from '@/components/ui/card';
-import { Lock } from 'lucide-react';
+import { Shield } from 'lucide-react';
 import { auditLogger } from '@/utils/auditLogger';
 import { securityMonitor } from '@/utils/securityMonitor';
 
@@ -12,13 +13,13 @@ interface PermissionWrapperProps {
   showFallback?: boolean;
 }
 
-const PermissionWrapper = ({ 
-  children, 
-  permission, 
+const PermissionWrapper: React.FC<PermissionWrapperProps> = ({
+  children,
+  permission,
   fallback,
   showFallback = false 
-}: PermissionWrapperProps) => {
-  const { permissions, loading, userType } = usePermissions();
+}) => {
+  const { permissions, loading, userType, userId, profile } = usePermissions();
 
   React.useEffect(() => {
     if (!loading && !permissions[permission]) {
@@ -27,7 +28,7 @@ const PermissionWrapper = ({
         'unauthorized_access_attempt',
         `User attempted to access ${permission} without proper permissions`,
         'security',
-        undefined // Since we don't have user.id, pass undefined
+        userId
       );
       
       // Report as potential privilege escalation
@@ -35,19 +36,20 @@ const PermissionWrapper = ({
         type: 'privilege_escalation',
         severity: 'medium',
         description: `Unauthorized access attempt to ${permission}`,
-        userId: undefined, // Since we don't have user.id, pass undefined
+        userId: userId,
         metadata: {
           permission,
-          userType: userType
+          userType: userType,
+          profileId: profile?.id
         }
       });
     }
-  }, [loading, permissions, permission, userType]);
+  }, [loading, permissions, permission, userType, userId, profile]);
 
   if (loading) {
     return (
-      <div className="animate-pulse">
-        <div className="h-20 bg-gray-200 rounded"></div>
+      <div className="flex items-center justify-center p-4">
+        <div className="animate-spin rounded-full h-6 w-6 border-b-2 border-primary"></div>
       </div>
     );
   }
@@ -59,10 +61,15 @@ const PermissionWrapper = ({
     
     if (showFallback) {
       return (
-        <Card className="border-dashed">
-          <CardContent className="flex items-center justify-center p-6 text-gray-500">
-            <Lock className="w-4 h-4 mr-2" />
-            <span>Access restricted - Insufficient permissions</span>
+        <Card className="m-4">
+          <CardContent className="flex items-center justify-center p-8">
+            <div className="text-center">
+              <Shield className="h-12 w-12 text-muted-foreground mx-auto mb-4" />
+              <h3 className="text-lg font-semibold mb-2">Access Restricted</h3>
+              <p className="text-muted-foreground">
+                You don't have permission to access this feature.
+              </p>
+            </div>
           </CardContent>
         </Card>
       );
