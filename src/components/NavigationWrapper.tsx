@@ -33,7 +33,9 @@ const NavigationWrapper = ({ children }: NavigationWrapperProps) => {
 
       // Handle unauthenticated users
       if (!session) {
+        // Clear all client-side authentication data
         localStorage.removeItem('colcord_user');
+        sessionStorage.clear();
         setLoading(false);
         
         if (currentPath !== '/') {
@@ -42,17 +44,30 @@ const NavigationWrapper = ({ children }: NavigationWrapperProps) => {
         return;
       }
 
-      // Handle authenticated users
+      // Handle authenticated users with server-side validation
       try {
-        // Get user profile to determine their type and route
-        const { data: profile, error } = await supabase
+        console.log('Validating session server-side...');
+        
+        // Validate session with server - this prevents client-side manipulation
+        const { data: { user }, error: sessionError } = await supabase.auth.getUser();
+        
+        if (sessionError || !user) {
+          console.error('Session validation failed:', sessionError);
+          await supabase.auth.signOut();
+          navigate('/', { replace: true });
+          setLoading(false);
+          return;
+        }
+
+        // Get user profile with proper server-side validation
+        const { data: profile, error: profileError } = await supabase
           .from('user_profiles')
           .select('*')
-          .eq('id', session.user.id)
+          .eq('id', user.id)
           .single();
 
-        if (error) {
-          console.error('Error fetching user profile:', error);
+        if (profileError) {
+          console.error('Error fetching user profile:', profileError);
           await supabase.auth.signOut();
           navigate('/', { replace: true });
           setLoading(false);
@@ -67,9 +82,50 @@ const NavigationWrapper = ({ children }: NavigationWrapperProps) => {
           return;
         }
 
-        // Store user profile in localStorage for component access
-        localStorage.setItem('colcord_user', JSON.stringify(profile));
+        // Validate user is active
+        if (!profile.is_active) {
+          console.error('User account is inactive');
+          await supabase.auth.signOut();
+          navigate('/', { replace: true });
+          setLoading(false);
+          return;
+        }
 
+        // Get and validate admin roles from database (server-side)
+        let adminRoles = [];
+        if (profile.user_type === 'admin' || profile.user_type === 'super_admin') {
+          const { data: roles, error: rolesError } = await supabase
+            .from('admin_roles')
+            .select('*')
+            .eq('user_id', user.id)
+            .eq('college_id', profile.college_id)
+            .eq('is_active', true);
+
+          if (rolesError) {
+            console.error('Error fetching admin roles:', rolesError);
+            // If admin role validation fails, treat as regular user
+            adminRoles = [];
+          } else {
+            adminRoles = roles || [];
+          }
+        }
+
+        // Enhanced profile with validated admin roles
+        const enhancedProfile = {
+          ...profile,
+          admin_roles: adminRoles,
+          // Only set hierarchy_level based on actual validated roles
+          hierarchy_level: adminRoles.find(r => r.admin_role_type === 'super_admin') 
+            ? 'super_admin' 
+            : adminRoles.length > 0 
+              ? 'admin' 
+              : profile.user_type
+        };
+
+        // Store validated profile in localStorage (but rely on server validation)
+        localStorage.setItem('colcord_user', JSON.stringify(enhancedProfile));
+
+        // Determine correct route based on actual user type
         const correctRoute = USER_ROUTE_MAP[profile.user_type as keyof typeof USER_ROUTE_MAP];
         
         if (!correctRoute) {
@@ -84,8 +140,14 @@ const NavigationWrapper = ({ children }: NavigationWrapperProps) => {
         if (currentPath === '/') {
           navigate(correctRoute, { replace: true });
         } else if (currentPath !== correctRoute) {
-          // Redirect if user is on wrong route
-          navigate(correctRoute, { replace: true });
+          // Check if user is trying to access admin route
+          if (currentPath === '/admin' && profile.user_type !== 'admin' && profile.user_type !== 'super_admin') {
+            console.warn('Unauthorized access attempt to admin route');
+            navigate(correctRoute, { replace: true });
+          } else if (currentPath !== correctRoute) {
+            // Redirect if user is on wrong route for their type
+            navigate(correctRoute, { replace: true });
+          }
         }
         
         setLoading(false);
@@ -97,17 +159,31 @@ const NavigationWrapper = ({ children }: NavigationWrapperProps) => {
       }
     };
 
-    // Set up auth state listener
+    // Set up auth state listener with enhanced security
     const { data: { subscription } } = supabase.auth.onAuthStateChange(
-      (event, session) => {
+      async (event, session) => {
         console.log('Auth state changed:', event, session?.user?.email);
+        
+        // Log security events for monitoring
+        if (event === 'SIGNED_OUT') {
+          console.log('User signed out - clearing all client data');
+          localStorage.clear();
+          sessionStorage.clear();
+        }
+        
         setSession(session);
-        handleAuthStateChange(session);
+        await handleAuthStateChange(session);
       }
     );
 
-    // Check for existing session
-    supabase.auth.getSession().then(({ data: { session } }) => {
+    // Check for existing session with server validation
+    supabase.auth.getSession().then(({ data: { session }, error }) => {
+      if (error) {
+        console.error('Error getting session:', error);
+        setLoading(false);
+        return;
+      }
+      
       console.log('Initial session check:', session?.user?.email);
       setSession(session);
       handleAuthStateChange(session);

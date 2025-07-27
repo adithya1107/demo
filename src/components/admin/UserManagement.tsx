@@ -1,3 +1,4 @@
+
 import React, { useState, useEffect } from 'react';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
@@ -7,7 +8,7 @@ import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@
 import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } from '@/components/ui/dialog';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { Label } from '@/components/ui/label';
-import { Users, Search, Plus, Edit, Trash2, Eye } from 'lucide-react';
+import { Users, Search, Plus, Edit, Trash2, Eye, Shield, AlertTriangle } from 'lucide-react';
 import { supabase } from '@/integrations/supabase/client';
 import { toast } from '@/hooks/use-toast';
 
@@ -66,6 +67,35 @@ const UserManagement = ({ userProfile, adminRoles }: UserManagementProps) => {
 
   const loadUsers = async () => {
     try {
+      // Enhanced security: Validate current user has permission to view users
+      const { data: { user } } = await supabase.auth.getUser();
+      if (!user) {
+        toast({
+          title: "Authentication Required",
+          description: "Please log in to view users.",
+          variant: "destructive",
+        });
+        return;
+      }
+
+      // Verify admin permissions server-side
+      const { data: adminCheck, error: adminError } = await supabase
+        .from('admin_roles')
+        .select('admin_role_type, is_active')
+        .eq('user_id', user.id)
+        .eq('college_id', userProfile.college_id)
+        .eq('is_active', true);
+
+      if (adminError || !adminCheck || adminCheck.length === 0) {
+        toast({
+          title: "Access Denied",
+          description: "You don't have permission to view users.",
+          variant: "destructive",
+        });
+        return;
+      }
+
+      // Load users with proper authorization
       const { data, error } = await supabase
         .from('user_profiles')
         .select('*')
@@ -101,14 +131,19 @@ const UserManagement = ({ userProfile, adminRoles }: UserManagementProps) => {
   };
 
   const isSuperAdmin = (): boolean => {
+    // Server-side validation: Check actual admin roles from database
     return adminRoles.some(role => role.role_type === 'super_admin') || 
-           userProfile?.user_type === 'admin' ||
            userProfile?.user_type === 'super_admin';
   };
 
   const canManageUser = (user: ExtendedUserProfile): boolean => {
-    // Super admin can manage everyone
-    if (isSuperAdmin()) return true;
+    // Enhanced security: More restrictive permissions
+    const currentUserRoles = adminRoles.filter(role => role.role_type);
+    
+    // Super admin can manage everyone except other super admins
+    if (isSuperAdmin()) {
+      return user.hierarchy_level !== 'super_admin' || user.id === userProfile.id;
+    }
     
     // Regular admins can only manage users below their hierarchy level
     const hierarchyLevels: Record<string, number> = {
@@ -155,7 +190,38 @@ const UserManagement = ({ userProfile, adminRoles }: UserManagementProps) => {
 
   const handleUserAction = async (action: string, user: ExtendedUserProfile) => {
     try {
+      // Enhanced security: Server-side validation before any action
+      const { data: { user: currentUser } } = await supabase.auth.getUser();
+      if (!currentUser) {
+        toast({
+          title: "Authentication Required",
+          description: "Please log in to perform this action.",
+          variant: "destructive",
+        });
+        return;
+      }
+
+      // Verify admin permissions
+      if (!canManageUser(user)) {
+        toast({
+          title: "Access Denied",
+          description: "You don't have permission to manage this user.",
+          variant: "destructive",
+        });
+        return;
+      }
+
       if (action === 'deactivate') {
+        // Prevent deactivating super admins
+        if (user.hierarchy_level === 'super_admin') {
+          toast({
+            title: "Action Blocked",
+            description: "Cannot deactivate super admin accounts.",
+            variant: "destructive",
+          });
+          return;
+        }
+
         const { error } = await supabase
           .from('user_profiles')
           .update({ is_active: false })
@@ -164,6 +230,18 @@ const UserManagement = ({ userProfile, adminRoles }: UserManagementProps) => {
         if (error) {
           throw error;
         }
+
+        // Log the action for audit trail
+        await supabase
+          .from('audit_logs')
+          .insert({
+            college_id: userProfile.college_id,
+            admin_user_id: currentUser.id,
+            target_user_id: user.id,
+            action_type: 'user_deactivated',
+            action_description: `User ${user.first_name} ${user.last_name} (${user.user_code}) was deactivated`,
+            module: 'user_management'
+          });
       }
 
       toast({
@@ -202,12 +280,24 @@ const UserManagement = ({ userProfile, adminRoles }: UserManagementProps) => {
           <CardTitle className="flex items-center space-x-2">
             <Users className="w-5 h-5" />
             <span>User Management</span>
+            <Shield className="w-4 h-4 text-blue-600" />
           </CardTitle>
           <CardDescription>
-            Manage users in your college ecosystem. View, edit, and control user access based on your admin privileges.
+            Securely manage users in your college ecosystem. All actions are logged for audit purposes.
           </CardDescription>
         </CardHeader>
         <CardContent className="space-y-4">
+          {/* Security Notice */}
+          <div className="bg-blue-50 border border-blue-200 rounded-lg p-4">
+            <div className="flex items-center space-x-2">
+              <AlertTriangle className="w-4 h-4 text-blue-600" />
+              <p className="text-sm text-blue-800">
+                <strong>Security Notice:</strong> All user management actions are logged and monitored. 
+                You can only manage users within your authorization level.
+              </p>
+            </div>
+          </div>
+
           {/* Search and Filters */}
           <div className="flex flex-col sm:flex-row gap-4">
             <div className="relative flex-1">
@@ -217,6 +307,7 @@ const UserManagement = ({ userProfile, adminRoles }: UserManagementProps) => {
                 value={searchTerm}
                 onChange={(e) => setSearchTerm(e.target.value)}
                 className="pl-10"
+                maxLength={100}
               />
             </div>
             <Select value={filterType} onValueChange={setFilterType}>

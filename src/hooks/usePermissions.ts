@@ -126,20 +126,31 @@ export const usePermissions = () => {
   useEffect(() => {
     const loadUserPermissions = async () => {
       try {
-        const { data: { user } } = await supabase.auth.getUser();
-        if (!user) {
+        // Get authenticated user with server-side validation
+        const { data: { user }, error: userError } = await supabase.auth.getUser();
+        
+        if (userError || !user) {
+          console.error('User authentication error:', userError);
           setLoading(false);
           return;
         }
 
-        // Get user profile to determine user type
-        const { data: profile } = await supabase
+        // Get user profile with server-side validation
+        const { data: profile, error: profileError } = await supabase
           .from('user_profiles')
-          .select('user_type')
+          .select('user_type, college_id, is_active')
           .eq('id', user.id)
           .single();
 
-        if (!profile) {
+        if (profileError || !profile) {
+          console.error('Profile fetch error:', profileError);
+          setLoading(false);
+          return;
+        }
+
+        // Verify user is active
+        if (!profile.is_active) {
+          console.error('User account is inactive');
           setLoading(false);
           return;
         }
@@ -147,19 +158,85 @@ export const usePermissions = () => {
         const userTypeKey = profile.user_type === 'faculty' ? 'teacher' : profile.user_type;
         setUserType(profile.user_type);
 
-        // Get permissions for user type
+        // Get permissions for user type with server-side validation
         const userPermissions = PERMISSION_SETS[userTypeKey as keyof typeof PERMISSION_SETS];
+        
         if (userPermissions) {
-          setPermissions({ ...DEFAULT_PERMISSIONS, ...userPermissions });
+          // For admin users, get additional permissions from database
+          if (profile.user_type === 'admin' || profile.user_type === 'super_admin') {
+            try {
+              const { data: adminRoles, error: rolesError } = await supabase
+                .from('admin_roles')
+                .select('admin_role_type, permissions, is_active')
+                .eq('user_id', user.id)
+                .eq('college_id', profile.college_id)
+                .eq('is_active', true);
+
+              if (!rolesError && adminRoles && adminRoles.length > 0) {
+                // Merge admin permissions with base permissions
+                const enhancedPermissions = { ...DEFAULT_PERMISSIONS, ...userPermissions };
+                
+                // Add admin-specific permissions based on roles
+                adminRoles.forEach(role => {
+                  if (role.admin_role_type === 'super_admin') {
+                    // Super admin gets all permissions
+                    Object.keys(enhancedPermissions).forEach(key => {
+                      enhancedPermissions[key as keyof UserPermissions] = true;
+                    });
+                  } else if (role.permissions && typeof role.permissions === 'object') {
+                    // Apply role-specific permissions
+                    Object.keys(role.permissions).forEach(key => {
+                      if (key in enhancedPermissions) {
+                        enhancedPermissions[key as keyof UserPermissions] = Boolean(role.permissions[key]);
+                      }
+                    });
+                  }
+                });
+                
+                setPermissions(enhancedPermissions);
+              } else {
+                // No admin roles found, use base permissions
+                setPermissions({ ...DEFAULT_PERMISSIONS, ...userPermissions });
+              }
+            } catch (error) {
+              console.error('Error loading admin roles:', error);
+              // Fallback to base permissions if admin role check fails
+              setPermissions({ ...DEFAULT_PERMISSIONS, ...userPermissions });
+            }
+          } else {
+            // Regular user, use base permissions
+            setPermissions({ ...DEFAULT_PERMISSIONS, ...userPermissions });
+          }
+        } else {
+          console.warn('Unknown user type:', userTypeKey);
+          setPermissions(DEFAULT_PERMISSIONS);
         }
       } catch (error) {
         console.error('Error loading user permissions:', error);
+        setPermissions(DEFAULT_PERMISSIONS);
       } finally {
         setLoading(false);
       }
     };
 
     loadUserPermissions();
+
+    // Listen for auth changes and reload permissions
+    const { data: { subscription } } = supabase.auth.onAuthStateChange(
+      (event, session) => {
+        if (event === 'SIGNED_IN' && session) {
+          loadUserPermissions();
+        } else if (event === 'SIGNED_OUT') {
+          setPermissions(DEFAULT_PERMISSIONS);
+          setUserType(null);
+          setLoading(false);
+        }
+      }
+    );
+
+    return () => {
+      subscription.unsubscribe();
+    };
   }, []);
 
   return { permissions, userType, loading };

@@ -6,7 +6,7 @@ import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
 import { toast } from "@/components/ui/use-toast"
-import { HelpCircle } from 'lucide-react';
+import { HelpCircle, AlertTriangle } from 'lucide-react';
 
 interface FormData {
   college_code: string;
@@ -20,6 +20,8 @@ const MultiStepLogin = () => {
   const [error, setError] = useState('');
   const [collegeValidated, setCollegeValidated] = useState(false);
   const [collegeName, setCollegeName] = useState('');
+  const [loginAttempts, setLoginAttempts] = useState(0);
+  const [isBlocked, setIsBlocked] = useState(false);
   const navigate = useNavigate();
 
   const [formData, setFormData] = useState<FormData>({
@@ -29,15 +31,28 @@ const MultiStepLogin = () => {
     email: ''
   });
 
+  const MAX_LOGIN_ATTEMPTS = 5;
+  const BLOCK_DURATION = 15 * 60 * 1000; // 15 minutes
+
   const handleChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     const { name, value } = e.target;
-    setFormData(prev => ({ ...prev, [name]: value }));
+    
+    // Input sanitization to prevent XSS
+    const sanitizedValue = value.replace(/<script\b[^<]*(?:(?!<\/script>)<[^<]*)*<\/script>/gi, '');
+    
+    setFormData(prev => ({ ...prev, [name]: sanitizedValue }));
     setError(''); // Clear error when user types
   };
 
   const handleCollegeValidation = async () => {
     if (!formData.college_code.trim()) {
       setError('Please enter a college code');
+      return;
+    }
+
+    // Input validation - only allow alphanumeric characters
+    if (!/^[a-zA-Z0-9]+$/.test(formData.college_code)) {
+      setError('College code can only contain letters and numbers');
       return;
     }
 
@@ -82,13 +97,33 @@ const MultiStepLogin = () => {
   const handleLogin = async (e: React.FormEvent) => {
     e.preventDefault();
     
+    // Check if user is blocked due to too many attempts
+    if (isBlocked) {
+      setError('Account temporarily blocked due to multiple failed login attempts. Please try again later.');
+      return;
+    }
+
     if (!collegeValidated) {
       setError('Please validate your college code first');
       return;
     }
 
+    // Enhanced input validation
     if (!formData.email || !formData.password) {
       setError('Please fill in all required fields');
+      return;
+    }
+
+    // Email format validation
+    const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+    if (!emailRegex.test(formData.email)) {
+      setError('Please enter a valid email address');
+      return;
+    }
+
+    // Password strength validation (minimum requirements)
+    if (formData.password.length < 6) {
+      setError('Password must be at least 6 characters long');
       return;
     }
 
@@ -96,9 +131,9 @@ const MultiStepLogin = () => {
     setError('');
 
     try {
-      console.log('Attempting login with:', formData.email);
+      console.log('Attempting login with enhanced security...');
       
-      // Sign in with Supabase Auth
+      // Sign in with Supabase Auth with enhanced security
       const { data: authData, error: authError } = await supabase.auth.signInWithPassword({
         email: formData.email,
         password: formData.password,
@@ -106,6 +141,30 @@ const MultiStepLogin = () => {
 
       if (authError) {
         console.error('Auth error:', authError);
+        
+        // Handle specific auth errors
+        if (authError.message.includes('Invalid login credentials')) {
+          setLoginAttempts(prev => prev + 1);
+          
+          if (loginAttempts + 1 >= MAX_LOGIN_ATTEMPTS) {
+            setIsBlocked(true);
+            setTimeout(() => {
+              setIsBlocked(false);
+              setLoginAttempts(0);
+            }, BLOCK_DURATION);
+            
+            toast({
+              title: 'Account Blocked',
+              description: 'Too many failed login attempts. Please try again in 15 minutes.',
+              variant: 'destructive',
+            });
+            return;
+          }
+          
+          setError(`Invalid email or password. ${MAX_LOGIN_ATTEMPTS - loginAttempts - 1} attempts remaining.`);
+          return;
+        }
+        
         throw authError;
       }
 
@@ -113,9 +172,9 @@ const MultiStepLogin = () => {
         throw new Error('Login failed - no user returned');
       }
 
-      console.log('Auth successful, fetching profile...');
+      console.log('Auth successful, validating user profile...');
 
-      // Get user profile
+      // Enhanced user profile validation
       const { data: profile, error: profileError } = await supabase
         .from('user_profiles')
         .select('*')
@@ -131,6 +190,11 @@ const MultiStepLogin = () => {
         throw new Error('User profile not found');
       }
 
+      // Verify user is active
+      if (!profile.is_active) {
+        throw new Error('User account is inactive. Please contact support.');
+      }
+
       // Verify user belongs to the specified college
       const { data: college } = await supabase
         .from('colleges')
@@ -142,6 +206,10 @@ const MultiStepLogin = () => {
         throw new Error('User does not belong to the specified college');
       }
 
+      // Reset login attempts on successful login
+      setLoginAttempts(0);
+      setIsBlocked(false);
+
       console.log('Login successful for:', profile.first_name, profile.last_name);
 
       toast({
@@ -152,6 +220,7 @@ const MultiStepLogin = () => {
       // The NavigationWrapper will handle the redirect based on user type
     } catch (error: any) {
       console.error('Login error:', error);
+      
       let errorMessage = 'Login failed. Please check your credentials.';
       
       if (error.message?.includes('Invalid login credentials')) {
@@ -160,6 +229,8 @@ const MultiStepLogin = () => {
         errorMessage = 'Please check your email and click the confirmation link.';
       } else if (error.message?.includes('Too many requests')) {
         errorMessage = 'Too many login attempts. Please wait a moment and try again.';
+      } else if (error.message?.includes('inactive')) {
+        errorMessage = 'Your account is inactive. Please contact support.';
       } else if (error.message) {
         errorMessage = error.message;
       }
@@ -186,15 +257,24 @@ const MultiStepLogin = () => {
     <div className="bg-card rounded-lg shadow-md p-8 space-y-6 border border-white/10">
       <div className="text-center mb-6">
         <h2 className="text-2xl font-bold text-foreground mb-2">College Access</h2>
-        <p className="text-muted-foreground">Login to your account</p>
+        <p className="text-muted-foreground">Secure login to your account</p>
         {collegeValidated && collegeName && (
           <p className="text-sm text-green-600 mt-2">✓ {collegeName}</p>
         )}
       </div>
 
       {error && (
-        <div className="text-destructive text-sm text-center bg-destructive/10 p-3 rounded-md border border-destructive/20">
+        <div className="text-destructive text-sm text-center bg-destructive/10 p-3 rounded-md border border-destructive/20 flex items-center gap-2">
+          <AlertTriangle className="h-4 w-4" />
           {error}
+        </div>
+      )}
+
+      {isBlocked && (
+        <div className="text-destructive text-sm text-center bg-destructive/10 p-3 rounded-md border border-destructive/20">
+          <AlertTriangle className="h-4 w-4 mx-auto mb-2" />
+          <strong>Account Temporarily Blocked</strong>
+          <p>Too many failed login attempts. Please try again in 15 minutes.</p>
         </div>
       )}
 
@@ -212,6 +292,7 @@ const MultiStepLogin = () => {
               required
               className={collegeValidated ? "pr-20 border-green-500" : "pr-20"}
               disabled={collegeValidated}
+              maxLength={10}
             />
             {!collegeValidated ? (
               <Button
@@ -254,6 +335,7 @@ const MultiStepLogin = () => {
                 onChange={handleChange}
                 placeholder="Enter your user code (e.g., ANI0002)"
                 required
+                maxLength={20}
               />
             </div>
 
@@ -267,6 +349,7 @@ const MultiStepLogin = () => {
                 onChange={handleChange}
                 placeholder="Enter your email address"
                 required
+                maxLength={100}
               />
             </div>
 
@@ -280,13 +363,15 @@ const MultiStepLogin = () => {
                 onChange={handleChange}
                 placeholder="Enter your password"
                 required
+                minLength={6}
+                maxLength={100}
               />
             </div>
 
             <Button 
               type="submit" 
               className="w-full" 
-              disabled={isLoading}
+              disabled={isLoading || isBlocked}
             >
               {isLoading ? (
                 <div className="flex items-center gap-2">
@@ -297,6 +382,13 @@ const MultiStepLogin = () => {
                 'Login'
               )}
             </Button>
+
+            {loginAttempts > 0 && (
+              <div className="text-sm text-amber-600 text-center">
+                Warning: {loginAttempts} failed attempt{loginAttempts > 1 ? 's' : ''}. 
+                {MAX_LOGIN_ATTEMPTS - loginAttempts} remaining before account is blocked.
+              </div>
+            )}
           </>
         )}
       </form>
