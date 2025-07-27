@@ -1,4 +1,3 @@
-
 import React, { useState, useCallback, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { supabase } from '@/integrations/supabase/client';
@@ -25,6 +24,24 @@ interface FormData {
   user_code: string;
   password: string;
   email: string;
+}
+
+interface CollegeData {
+  id: string;
+  name: string;
+  code: string;
+}
+
+interface UserProfile {
+  id: string;
+  first_name: string;
+  last_name: string;
+  email: string;
+  college_id: string;
+  is_active: boolean;
+  user_type: string;
+  created_at: string;
+  updated_at: string;
 }
 
 const MultiStepLogin = () => {
@@ -175,7 +192,7 @@ const MultiStepLogin = () => {
           .single(),
         'select',
         'college_validation'
-      );
+      ) as CollegeData | null;
 
       if (!collegeData) {
         setError('Invalid college code. Please check and try again.');
@@ -340,7 +357,7 @@ const MultiStepLogin = () => {
           .single(),
         'select',
         'user_profile_validation'
-      );
+      ) as UserProfile | null;
 
       if (!profileData) {
         await auditLogger.logSecurityEvent(
@@ -372,7 +389,7 @@ const MultiStepLogin = () => {
           .single(),
         'select',
         'college_verification'
-      );
+      ) as CollegeData | null;
 
       if (!collegeData || profileData.college_id !== collegeData.id) {
         await securityMonitor.reportThreat({
