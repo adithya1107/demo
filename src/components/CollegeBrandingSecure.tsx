@@ -1,4 +1,3 @@
-
 import React, { useMemo } from 'react';
 import { sanitizeCSS } from '@/utils/security';
 
@@ -21,11 +20,11 @@ const CollegeBrandingSecure = ({
   const sanitizedPrimaryColor = useMemo(() => sanitizeCSS(primaryColor), [primaryColor]);
   const sanitizedSecondaryColor = useMemo(() => sanitizeCSS(secondaryColor), [secondaryColor]);
 
-  // Create CSS custom properties securely
+  // Create CSS custom properties securely with proper typing
   const cssVariables = useMemo(() => ({
     '--college-primary': sanitizedPrimaryColor,
     '--college-secondary': sanitizedSecondaryColor,
-  }), [sanitizedPrimaryColor, sanitizedSecondaryColor]);
+  } as React.CSSProperties), [sanitizedPrimaryColor, sanitizedSecondaryColor]);
 
   return (
     <div 
