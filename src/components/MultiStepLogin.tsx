@@ -1,3 +1,4 @@
+
 import React, { useState, useCallback, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { supabase } from '@/integrations/supabase/client';
@@ -8,6 +9,9 @@ import { HelpCircle, AlertTriangle, Shield } from 'lucide-react';
 import SecureInput from '@/components/SecureInput';
 import { useSecurityContext } from '@/components/SecurityProvider';
 import { validateSessionIntegrity } from '@/utils/sessionSecurity';
+import { auditLogger } from '@/utils/auditLogger';
+import { securityMonitor } from '@/utils/securityMonitor';
+import { dbSecurityValidator } from '@/utils/databaseSecurity';
 import { 
   validateEmail, 
   validatePassword, 
@@ -49,7 +53,6 @@ const MultiStepLogin = () => {
     const checkSession = async () => {
       const isValid = await validateSessionIntegrity();
       if (isValid) {
-        // User already has valid session, redirect to dashboard
         navigate('/dashboard', { replace: true });
       }
     };
@@ -57,7 +60,7 @@ const MultiStepLogin = () => {
     checkSession();
   }, [navigate]);
 
-  // Check if user is rate limited
+  // Security monitoring for rate limiting
   useEffect(() => {
     const clientId = localStorage.getItem('client_id') || 
       (Math.random().toString(36).substr(2, 9) + Date.now().toString(36));
@@ -66,20 +69,42 @@ const MultiStepLogin = () => {
       localStorage.setItem('client_id', clientId);
     }
     
-    const remaining = rateLimiter.getRemainingAttempts(clientId);
-    setIsBlocked(remaining <= 0);
-  }, [rateLimiter]);
+    const checkRateLimit = async () => {
+      const allowed = await securityMonitor.checkRateLimit(clientId);
+      setIsBlocked(!allowed);
+    };
+    
+    checkRateLimit();
+  }, []);
 
-  const handleSecurityViolation = useCallback((violation: string) => {
+  const handleSecurityViolation = useCallback(async (violation: string) => {
     reportSecurityViolation(violation, {
       component: 'MultiStepLogin',
       userAgent: navigator.userAgent,
       timestamp: new Date().toISOString()
     });
+    
+    await securityMonitor.reportThreat({
+      type: 'suspicious_activity',
+      severity: 'medium',
+      description: violation,
+      userAgent: navigator.userAgent,
+    });
   }, [reportSecurityViolation]);
 
-  const handleChange = useCallback((e: React.ChangeEvent<HTMLInputElement>) => {
+  const handleChange = useCallback(async (e: React.ChangeEvent<HTMLInputElement>) => {
     const { name, value } = e.target;
+    
+    // Check for injection attempts
+    const isInjection = await securityMonitor.detectInjectionAttempt(
+      value,
+      `login_form_${name}`
+    );
+    
+    if (isInjection) {
+      await handleSecurityViolation(`Injection attempt in ${name} field`);
+      return;
+    }
     
     // Additional validation based on field
     let isValid = true;
@@ -108,12 +133,12 @@ const MultiStepLogin = () => {
     }
 
     if (!isValid && name !== 'password') {
-      handleSecurityViolation(`Invalid ${name} format`);
+      await handleSecurityViolation(`Invalid ${name} format`);
       return;
     }
     
     setFormData(prev => ({ ...prev, [name]: sanitizedValue }));
-    setError(''); // Clear error when user types
+    setError('');
   }, [handleSecurityViolation]);
 
   const handleCollegeValidation = async () => {
@@ -124,12 +149,14 @@ const MultiStepLogin = () => {
 
     if (!validateCollegeCode(formData.college_code)) {
       setError('College code format is invalid');
-      handleSecurityViolation('Invalid college code format');
+      await handleSecurityViolation('Invalid college code format');
       return;
     }
 
     const clientId = localStorage.getItem('client_id') || 'unknown';
-    if (!rateLimiter.isAllowed(clientId)) {
+    const rateAllowed = await securityMonitor.checkRateLimit(clientId);
+    
+    if (!rateAllowed) {
       setIsBlocked(true);
       setError('Too many attempts. Please try again later.');
       return;
@@ -139,16 +166,28 @@ const MultiStepLogin = () => {
     setError('');
 
     try {
-      const { data, error } = await supabase
-        .from('colleges')
-        .select('id, name, code')
-        .eq('code', formData.college_code)
-        .single();
+      // Use secure database validation
+      const collegeData = await dbSecurityValidator.validateAndExecuteQuery(
+        supabase
+          .from('colleges')
+          .select('id, name, code')
+          .eq('code', formData.college_code)
+          .single(),
+        'select',
+        'college_validation'
+      );
 
-      if (error || !data) {
+      if (!collegeData) {
         setError('Invalid college code. Please check and try again.');
         setCollegeValidated(false);
         setCollegeName('');
+        
+        await auditLogger.logSecurityEvent(
+          'invalid_college_code',
+          `Invalid college code attempted: ${formData.college_code}`,
+          'low'
+        );
+        
         toast({
           title: 'College Code Invalid',
           description: 'Please enter a valid college code.',
@@ -158,17 +197,24 @@ const MultiStepLogin = () => {
       }
 
       setCollegeValidated(true);
-      setCollegeName(data.name);
+      setCollegeName(collegeData.name);
+      
+      await auditLogger.logUserAction(
+        'college_validation',
+        `College code validated: ${collegeData.name}`,
+        'authentication'
+      );
+      
       toast({
         title: 'College Code Validated',
-        description: `Welcome to ${data.name}!`,
+        description: `Welcome to ${collegeData.name}!`,
       });
     } catch (error: any) {
       console.error('College validation error:', error);
       setError('Unable to validate college code. Please try again.');
       setCollegeValidated(false);
       setCollegeName('');
-      handleSecurityViolation('College validation failed');
+      await handleSecurityViolation('College validation failed');
     } finally {
       setIsLoading(false);
     }
@@ -180,10 +226,17 @@ const MultiStepLogin = () => {
     const clientId = localStorage.getItem('client_id') || 'unknown';
     
     // Enhanced rate limiting check
-    if (!rateLimiter.isAllowed(clientId)) {
+    const rateAllowed = await securityMonitor.checkRateLimit(clientId);
+    
+    if (!rateAllowed) {
       setIsBlocked(true);
       setError('Account temporarily blocked due to multiple failed login attempts. Please try again later.');
-      reportSecurityViolation('Rate limit exceeded during login', { clientId });
+      await securityMonitor.reportThreat({
+        type: 'brute_force',
+        severity: 'high',
+        description: 'Rate limit exceeded during login',
+        metadata: { clientId }
+      });
       return;
     }
 
@@ -200,7 +253,7 @@ const MultiStepLogin = () => {
 
     if (!validateEmail(formData.email)) {
       setError('Please enter a valid email address');
-      handleSecurityViolation('Invalid email format in login');
+      await handleSecurityViolation('Invalid email format in login');
       return;
     }
 
@@ -214,17 +267,10 @@ const MultiStepLogin = () => {
     setError('');
 
     try {
-      console.log('Attempting secure login with enhanced validation...');
+      console.log('Attempting secure login with comprehensive security monitoring...');
       
-      // Enhanced security: Log login attempt
-      reportSecurityViolation('Login attempt', {
-        email: formData.email,
-        college_code: formData.college_code,
-        user_code: formData.user_code,
-        timestamp: new Date().toISOString(),
-        userAgent: navigator.userAgent,
-        clientId
-      });
+      // Log login attempt
+      await auditLogger.logLoginAttempt(false, formData.email, 'attempt_started');
       
       // Sign in with Supabase Auth with enhanced security
       const { data: authData, error: authError } = await supabase.auth.signInWithPassword({
@@ -239,11 +285,15 @@ const MultiStepLogin = () => {
         if (authError.message.includes('Invalid login credentials')) {
           setLoginAttempts(prev => prev + 1);
           
-          reportSecurityViolation('Failed login attempt', {
-            email: formData.email,
-            college_code: formData.college_code,
-            attempt_number: loginAttempts + 1,
-            error: authError.message
+          await auditLogger.logLoginAttempt(false, formData.email, 'invalid_credentials');
+          await securityMonitor.reportThreat({
+            type: 'brute_force',
+            severity: 'medium',
+            description: 'Failed login attempt with invalid credentials',
+            metadata: {
+              email: formData.email,
+              attempt_number: loginAttempts + 1
+            }
           });
           
           if (loginAttempts + 1 >= MAX_LOGIN_ATTEMPTS) {
@@ -252,6 +302,13 @@ const MultiStepLogin = () => {
               setIsBlocked(false);
               setLoginAttempts(0);
             }, BLOCK_DURATION);
+            
+            await securityMonitor.reportThreat({
+              type: 'brute_force',
+              severity: 'high',
+              description: 'Account blocked due to multiple failed login attempts',
+              metadata: { email: formData.email }
+            });
             
             toast({
               title: 'Account Blocked',
@@ -275,50 +332,59 @@ const MultiStepLogin = () => {
       console.log('Auth successful, validating user profile with enhanced security...');
 
       // Enhanced user profile validation with integrity checks
-      const { data: profile, error: profileError } = await supabase
-        .from('user_profiles')
-        .select('*')
-        .eq('id', authData.user.id)
-        .single();
+      const profileData = await dbSecurityValidator.validateAndExecuteQuery(
+        supabase
+          .from('user_profiles')
+          .select('*')
+          .eq('id', authData.user.id)
+          .single(),
+        'select',
+        'user_profile_validation'
+      );
 
-      if (profileError) {
-        console.error('Profile error:', profileError);
-        reportSecurityViolation('Profile validation failed', {
-          user_id: authData.user.id,
-          error: profileError.message
-        });
-        throw new Error('Unable to fetch user profile');
-      }
-
-      if (!profile) {
-        reportSecurityViolation('User profile not found', {
-          user_id: authData.user.id
-        });
+      if (!profileData) {
+        await auditLogger.logSecurityEvent(
+          'user_profile_not_found',
+          `User profile not found for authenticated user: ${authData.user.id}`,
+          'high'
+        );
         throw new Error('User profile not found');
       }
 
       // Enhanced security checks
-      if (!profile.is_active) {
-        reportSecurityViolation('Inactive user login attempt', {
-          user_id: authData.user.id,
-          profile
+      if (!profileData.is_active) {
+        await securityMonitor.reportThreat({
+          type: 'suspicious_activity',
+          severity: 'medium',
+          description: 'Inactive user attempted login',
+          userId: authData.user.id,
+          metadata: { profile: profileData }
         });
         throw new Error('User account is inactive. Please contact support.');
       }
 
       // Verify user belongs to the specified college with enhanced validation
-      const { data: college } = await supabase
-        .from('colleges')
-        .select('id, name, code')
-        .eq('code', formData.college_code)
-        .single();
+      const collegeData = await dbSecurityValidator.validateAndExecuteQuery(
+        supabase
+          .from('colleges')
+          .select('id, name, code')
+          .eq('code', formData.college_code)
+          .single(),
+        'select',
+        'college_verification'
+      );
 
-      if (!college || profile.college_id !== college.id) {
-        reportSecurityViolation('College mismatch during login', {
-          user_id: authData.user.id,
-          provided_college: formData.college_code,
-          user_college_id: profile.college_id,
-          college_id: college?.id
+      if (!collegeData || profileData.college_id !== collegeData.id) {
+        await securityMonitor.reportThreat({
+          type: 'privilege_escalation',
+          severity: 'high',
+          description: 'User attempted to access different college',
+          userId: authData.user.id,
+          metadata: {
+            provided_college: formData.college_code,
+            user_college_id: profileData.college_id,
+            college_id: collegeData?.id
+          }
         });
         throw new Error('User does not belong to the specified college');
       }
@@ -326,29 +392,32 @@ const MultiStepLogin = () => {
       // Enhanced session security: Validate session integrity
       const sessionValid = await validateSessionIntegrity();
       if (!sessionValid) {
-        reportSecurityViolation('Session validation failed after login', {
-          user_id: authData.user.id
-        });
+        await auditLogger.logSecurityEvent(
+          'session_validation_failed',
+          `Session validation failed after login for user: ${authData.user.id}`,
+          'high'
+        );
         throw new Error('Session validation failed');
       }
 
       // Reset login attempts on successful login
       setLoginAttempts(0);
       setIsBlocked(false);
-      rateLimiter.reset(clientId);
 
       // Log successful login
-      reportSecurityViolation('Successful login', {
-        user_id: authData.user.id,
-        college_code: formData.college_code,
-        user_type: profile.user_type
-      });
+      await auditLogger.logLoginAttempt(true, formData.email, 'login_successful');
+      await auditLogger.logUserAction(
+        'successful_login',
+        `User successfully logged in: ${profileData.first_name} ${profileData.last_name}`,
+        'authentication',
+        authData.user.id
+      );
 
-      console.log('Secure login successful for:', profile.first_name, profile.last_name);
+      console.log('Secure login successful for:', profileData.first_name, profileData.last_name);
 
       toast({
         title: 'Login Successful',
-        description: `Welcome back, ${profile.first_name} ${profile.last_name}!`,
+        description: `Welcome back, ${profileData.first_name} ${profileData.last_name}!`,
       });
 
       // The NavigationWrapper will handle the redirect based on user type
@@ -356,12 +425,11 @@ const MultiStepLogin = () => {
       console.error('Login error:', error);
       
       // Enhanced error logging
-      reportSecurityViolation('Login error', {
-        error: error.message,
-        stack: error.stack,
-        email: formData.email,
-        college_code: formData.college_code
-      });
+      await auditLogger.logSecurityEvent(
+        'login_error',
+        `Login error: ${error.message}`,
+        'medium'
+      );
       
       let errorMessage = 'Login failed. Please check your credentials.';
       
@@ -402,7 +470,7 @@ const MultiStepLogin = () => {
           <Shield className="w-6 h-6 text-blue-600 mr-2" />
           <h2 className="text-2xl font-bold text-foreground">Secure College Access</h2>
         </div>
-        <p className="text-muted-foreground">Enhanced security login to your account</p>
+        <p className="text-muted-foreground">Enhanced security login with comprehensive monitoring</p>
         {collegeValidated && collegeName && (
           <p className="text-sm text-green-600 mt-2">✓ {collegeName}</p>
         )}
