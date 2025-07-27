@@ -1,4 +1,3 @@
-
 import { useState, useEffect } from 'react';
 import { supabase } from '@/integrations/supabase/client';
 import { useAuth } from './useAuth';
@@ -9,12 +8,12 @@ export interface UserProfile {
   first_name: string;
   last_name: string;
   user_code: string;
-  user_type: 'student' | 'faculty' | 'admin' | 'parent' | 'alumni';
+  user_type: 'super_admin' | 'faculty' | 'staff' | 'admin' | 'student' | 'parent' | 'alumni' | 'teacher';
   college_id: string;
   is_active: boolean;
   created_at: string;
   updated_at: string;
-  hierarchy_level?: string;
+  hierarchy_level: 'super_admin' | 'faculty' | 'admin' | 'student' | 'parent' | 'alumni';
 }
 
 export const useUserProfile = () => {
