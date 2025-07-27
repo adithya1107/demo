@@ -1,4 +1,3 @@
-
 import React from 'react';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import AdminDashboard from '@/components/admin/AdminDashboard';
@@ -47,7 +46,7 @@ const Admin = () => {
           <TabsContent value="users">
             <PermissionWrapper permission="view_personal_dashboard">
               <EnhancedUserManagement 
-                userProfile={profile}
+                userProfile={profile as any}
                 adminRoles={adminRoles}
               />
             </PermissionWrapper>
