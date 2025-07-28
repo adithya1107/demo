@@ -19,7 +19,7 @@ interface MarketplaceItem {
   description: string;
   price: number;
   category: string;
-  condition: string;
+  condition: 'new' | 'like_new' | 'good' | 'fair' | 'poor';
   images: string[];
   seller_id: string;
   seller_name: string;
@@ -65,7 +65,6 @@ const StudentMarketplace = () => {
     if (!profile?.college_id) return;
 
     try {
-      // Use direct query since the table now exists
       const { data: rawItems, error } = await supabase
         .from('marketplace_items')
         .select('*')
@@ -129,7 +128,7 @@ const StudentMarketplace = () => {
   };
 
   const handlePaymentSuccess = async () => {
-    if (!selectedItem) return;
+    if (!selectedItem || !profile?.college_id) return;
 
     try {
       const { error } = await supabase
@@ -139,7 +138,8 @@ const StudentMarketplace = () => {
           buyer_id: profile?.id,
           seller_id: selectedItem.seller_id,
           amount: selectedItem.price,
-          status: 'completed'
+          status: 'completed',
+          college_id: profile.college_id
         });
 
       if (error) throw error;

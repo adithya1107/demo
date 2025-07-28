@@ -57,65 +57,57 @@ export const LoginCredentials: React.FC<LoginCredentialsProps> = ({
         throw new Error('College information not found');
       }
 
-      // Validate login credentials
-      const { data: loginData, error: loginError } = await supabase.rpc('validate_login', {
-        p_college_code: collegeInfo.code,
-        p_user_code: sanitizedUserCode,
-        p_password: password
-      });
+      // Use direct query instead of RPC since the function might not exist
+      const { data: userProfile, error: loginError } = await supabase
+        .from('user_profiles')
+        .select('id, user_type, first_name, last_name, email, password, college_id, is_active')
+        .eq('user_code', sanitizedUserCode)
+        .eq('college_id', collegeData.college_id)
+        .eq('is_active', true)
+        .single();
 
       if (loginError) throw loginError;
 
-      if (loginData && loginData.length > 0) {
-        const userData = loginData[0];
+      if (userProfile && userProfile.password === password) {
+        // Create the email format that Supabase expects
+        const email = `${sanitizedUserCode}@${collegeInfo.code.toLowerCase()}.edu`;
         
-        if (userData.success) {
-          // Create the email format that Supabase expects
-          const email = `${sanitizedUserCode}@${collegeInfo.code.toLowerCase()}.edu`;
-          
-          // Sign in with Supabase Auth using the constructed email
-          const { data: authData, error: authError } = await supabase.auth.signInWithPassword({
-            email: email,
-            password: password,
-          });
+        // Sign in with Supabase Auth using the constructed email
+        const { data: authData, error: authError } = await supabase.auth.signInWithPassword({
+          email: email,
+          password: password,
+        });
 
-          if (authError) {
-            // If user doesn't exist in auth, create them
-            if (authError.message.includes('Invalid login credentials')) {
-              const { data: signUpData, error: signUpError } = await supabase.auth.signUp({
-                email: email,
-                password: password,
-                options: {
-                  data: {
-                    user_code: sanitizedUserCode,
-                    college_id: userData.college_id,
-                    user_type: userData.user_type,
-                    first_name: userData.first_name,
-                    last_name: userData.last_name,
-                  }
+        if (authError) {
+          // If user doesn't exist in auth, create them
+          if (authError.message.includes('Invalid login credentials')) {
+            const { data: signUpData, error: signUpError } = await supabase.auth.signUp({
+              email: email,
+              password: password,
+              options: {
+                data: {
+                  user_code: sanitizedUserCode,
+                  college_id: userProfile.college_id,
+                  user_type: userProfile.user_type,
+                  first_name: userProfile.first_name,
+                  last_name: userProfile.last_name,
                 }
-              });
-
-              if (signUpError) throw signUpError;
-              
-              if (signUpData.user) {
-                onLogin(userData);
-                return;
               }
-            } else {
-              throw authError;
-            }
-          }
+            });
 
-          if (authData.user) {
-            onLogin(userData);
+            if (signUpError) throw signUpError;
+            
+            if (signUpData.user) {
+              onLogin(userProfile);
+              return;
+            }
+          } else {
+            throw authError;
           }
-        } else {
-          toast({
-            title: 'Login Failed',
-            description: userData.error_message || 'Invalid credentials',
-            variant: 'destructive',
-          });
+        }
+
+        if (authData.user) {
+          onLogin(userProfile);
         }
       } else {
         toast({

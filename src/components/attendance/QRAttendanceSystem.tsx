@@ -7,8 +7,8 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { supabase } from '@/integrations/supabase/client';
 import { useUserProfile } from '@/hooks/useUserProfile';
 import { toast } from '@/components/ui/use-toast';
-import { QRCodeGenerator } from './QRCodeGenerator';
-import { QRCodeScanner } from './QRCodeScanner';
+import QRCodeGenerator from './QRCodeGenerator';
+import QRCodeScanner from './QRCodeScanner';
 import { Calendar, Clock, MapPin, Users, CheckCircle } from 'lucide-react';
 
 interface AttendanceSession {
@@ -40,12 +40,12 @@ const QRAttendanceSystem = () => {
 
     try {
       if (profile.user_type === 'faculty') {
-        // Load sessions for faculty
+        // Load sessions for faculty with course information
         const { data: sessionsData, error } = await supabase
           .from('attendance_sessions')
           .select(`
             *,
-            courses:course_id (
+            courses!inner (
               course_name,
               instructor_id
             )
@@ -68,11 +68,11 @@ const QRAttendanceSystem = () => {
           .from('enrollments')
           .select(`
             course_id,
-            courses:course_id (
+            courses!inner (
               id,
               course_name,
               instructor_id,
-              user_profiles:instructor_id (
+              user_profiles!inner (
                 first_name,
                 last_name
               )
@@ -303,14 +303,17 @@ const QRAttendanceSystem = () => {
           <TabsContent value="generate" className="space-y-4">
             <QRCodeGenerator 
               onSessionCreated={handleCreateSession}
-              selectedSession={selectedSession}
+              instructorId={profile.id}
             />
           </TabsContent>
         )}
 
         {profile?.user_type === 'student' && (
           <TabsContent value="scan" className="space-y-4">
-            <QRCodeScanner onScanSuccess={handleScanSuccess} />
+            <QRCodeScanner 
+              onSuccess={handleScanSuccess}
+              activeSessions={sessions.filter(s => s.is_active)}
+            />
           </TabsContent>
         )}
       </Tabs>

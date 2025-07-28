@@ -30,14 +30,23 @@ export const CollegeValidation: React.FC<CollegeValidationProps> = ({ onValidate
     try {
       const sanitizedCode = sanitizeInput(collegeCode.trim().toUpperCase());
       
-      const { data, error } = await supabase.rpc('validate_college_code', {
-        college_code: sanitizedCode
-      });
+      // Use the existing function name from the database
+      const { data, error } = await supabase
+        .from('colleges')
+        .select('id, code, name, logo, primary_color, secondary_color')
+        .eq('code', sanitizedCode);
 
       if (error) throw error;
 
-      if (data && data.length > 0 && data[0].is_valid) {
-        onValidated(data[0]);
+      if (data && data.length > 0) {
+        onValidated({
+          college_id: data[0].id,
+          college_name: data[0].name,
+          college_logo: data[0].logo,
+          primary_color: data[0].primary_color,
+          secondary_color: data[0].secondary_color,
+          is_valid: true
+        });
       } else {
         toast({
           title: 'Invalid College Code',

@@ -6,15 +6,13 @@ import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Scan, CheckCircle } from 'lucide-react';
 import { toast } from '@/components/ui/use-toast';
-import { useUserProfile } from '@/hooks/useUserProfile';
 
 interface QRCodeScannerProps {
-  onSuccess: () => void;
+  onSuccess: (qrCode: string) => void;
   activeSessions: any[];
 }
 
 const QRCodeScanner: React.FC<QRCodeScannerProps> = ({ onSuccess, activeSessions }) => {
-  const { profile } = useUserProfile();
   const [qrCode, setQrCode] = useState('');
   const [loading, setLoading] = useState(false);
 
@@ -28,39 +26,11 @@ const QRCodeScanner: React.FC<QRCodeScannerProps> = ({ onSuccess, activeSessions
       return;
     }
 
-    if (!profile) {
-      toast({
-        title: 'Error',
-        description: 'User profile not found',
-        variant: 'destructive'
-      });
-      return;
-    }
-
     setLoading(true);
     try {
-      // Mock attendance marking
-      await new Promise(resolve => setTimeout(resolve, 1000));
-
-      // Simulate validation
-      const validQRCodes = ['ATTEND_123456', 'ATTEND_789012'];
-      
-      if (!validQRCodes.includes(qrCode)) {
-        toast({
-          title: 'Invalid QR Code',
-          description: 'QR code not found or session is inactive',
-          variant: 'destructive'
-        });
-        return;
-      }
-
-      toast({
-        title: 'Success',
-        description: 'Attendance marked successfully!'
-      });
-
+      // Call the parent's success handler
+      await onSuccess(qrCode);
       setQrCode('');
-      onSuccess();
     } catch (error) {
       console.error('Error marking attendance:', error);
       toast({
@@ -74,9 +44,15 @@ const QRCodeScanner: React.FC<QRCodeScannerProps> = ({ onSuccess, activeSessions
   };
 
   const simulateQRScan = () => {
-    // For demo purposes, use a mock QR code
-    const mockQR = 'ATTEND_123456';
-    setQrCode(mockQR);
+    // Use a QR code from active sessions if available
+    if (activeSessions.length > 0) {
+      const randomSession = activeSessions[Math.floor(Math.random() * activeSessions.length)];
+      setQrCode(randomSession.qr_code);
+    } else {
+      // For demo purposes, use a mock QR code
+      const mockQR = 'ATTEND_123456';
+      setQrCode(mockQR);
+    }
   };
 
   return (
