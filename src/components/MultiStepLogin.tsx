@@ -183,15 +183,20 @@ const MultiStepLogin = () => {
     setError('');
 
     try {
-      // Use secure database validation - FIXED
-      const collegeQuery = supabase
+      // Execute the query first, then validate - FIXED
+      const { data: rawCollegeData, error: collegeError } = await supabase
         .from('colleges')
         .select('id, name, code')
         .eq('code', formData.college_code)
         .single();
 
+      if (collegeError) {
+        throw collegeError;
+      }
+
+      // Now validate the result through security validator
       const collegeData = await dbSecurityValidator.validateAndExecuteQuery(
-        collegeQuery,
+        Promise.resolve(rawCollegeData),
         'select',
         'college_validation'
       ) as CollegeData | null;
@@ -350,15 +355,20 @@ const MultiStepLogin = () => {
 
       console.log('Auth successful, validating user profile with enhanced security...');
 
-      // Enhanced user profile validation with integrity checks - FIXED
-      const profileQuery = supabase
+      // Execute the user profile query first, then validate - FIXED
+      const { data: rawProfileData, error: profileError } = await supabase
         .from('user_profiles')
         .select('*')
         .eq('id', authData.user.id)
         .single();
 
+      if (profileError) {
+        throw profileError;
+      }
+
+      // Now validate the result through security validator
       const profileData = await dbSecurityValidator.validateAndExecuteQuery(
-        profileQuery,
+        Promise.resolve(rawProfileData),
         'select',
         'user_profile_validation'
       ) as UserProfile | null;
@@ -384,15 +394,20 @@ const MultiStepLogin = () => {
         throw new Error('User account is inactive. Please contact support.');
       }
 
-      // Verify user belongs to the specified college with enhanced validation - FIXED
-      const collegeVerificationQuery = supabase
+      // Execute the college verification query first, then validate - FIXED
+      const { data: rawCollegeVerificationData, error: collegeVerificationError } = await supabase
         .from('colleges')
         .select('id, name, code')
         .eq('code', formData.college_code)
         .single();
 
+      if (collegeVerificationError) {
+        throw collegeVerificationError;
+      }
+
+      // Now validate the result through security validator
       const collegeData = await dbSecurityValidator.validateAndExecuteQuery(
-        collegeVerificationQuery,
+        Promise.resolve(rawCollegeVerificationData),
         'select',
         'college_verification'
       ) as CollegeData | null;
