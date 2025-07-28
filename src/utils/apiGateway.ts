@@ -1,7 +1,7 @@
-
 import { supabase } from '@/integrations/supabase/client';
 import { dbSecurityValidator } from './databaseSecurity';
 import { auditLogger } from './auditLogger';
+import type { Database } from '@/integrations/supabase/types';
 
 export interface APIResponse<T = any> {
   data: T | null;
@@ -17,6 +17,15 @@ export interface APIConfig {
   enableCaching: boolean;
   cacheTimeout: number;
 }
+
+// Type for valid table names
+type TableName = keyof Database['public']['Tables'];
+
+// Type for Supabase response
+type SupabaseResponse<T> = {
+  data: T | null;
+  error: { message: string } | null;
+};
 
 export class APIGateway {
   private static instance: APIGateway;
@@ -84,7 +93,7 @@ export class APIGateway {
   }
 
   public async select<T>(
-    table: string,
+    table: TableName,
     query: any = {},
     useCache: boolean = true
   ): Promise<APIResponse<T[]>> {
@@ -148,7 +157,7 @@ export class APIGateway {
       // Store in request queue
       this.requestQueue.set(cacheKey, requestPromise);
 
-      const result = await requestPromise;
+      const result = await requestPromise as SupabaseResponse<T[]>;
       
       // Remove from queue
       this.requestQueue.delete(cacheKey);
@@ -183,7 +192,7 @@ export class APIGateway {
         timestamp: new Date().toISOString(),
       };
 
-    } catch (error) {
+    } catch (error: any) {
       this.requestQueue.delete(cacheKey);
       const duration = performance.now() - startTime;
       await this.logAPICall('SELECT', table, duration, false, error.message);
@@ -198,7 +207,7 @@ export class APIGateway {
   }
 
   public async insert<T>(
-    table: string,
+    table: TableName,
     data: any,
     options: { returning?: string } = {}
   ): Promise<APIResponse<T>> {
@@ -222,12 +231,13 @@ export class APIGateway {
       });
 
       const duration = performance.now() - startTime;
+      const typedResult = result as SupabaseResponse<T>;
 
-      if (result.error) {
-        await this.logAPICall('INSERT', table, duration, false, result.error.message);
+      if (typedResult.error) {
+        await this.logAPICall('INSERT', table, duration, false, typedResult.error.message);
         return {
           data: null,
-          error: result.error.message,
+          error: typedResult.error.message,
           success: false,
           timestamp: new Date().toISOString(),
         };
@@ -239,13 +249,13 @@ export class APIGateway {
       await this.logAPICall('INSERT', table, duration, true);
 
       return {
-        data: result.data,
+        data: typedResult.data,
         error: null,
         success: true,
         timestamp: new Date().toISOString(),
       };
 
-    } catch (error) {
+    } catch (error: any) {
       const duration = performance.now() - startTime;
       await this.logAPICall('INSERT', table, duration, false, error.message);
       
@@ -259,7 +269,7 @@ export class APIGateway {
   }
 
   public async update<T>(
-    table: string,
+    table: TableName,
     data: any,
     filters: Record<string, any>,
     options: { returning?: string } = {}
@@ -289,12 +299,13 @@ export class APIGateway {
       });
 
       const duration = performance.now() - startTime;
+      const typedResult = result as SupabaseResponse<T>;
 
-      if (result.error) {
-        await this.logAPICall('UPDATE', table, duration, false, result.error.message);
+      if (typedResult.error) {
+        await this.logAPICall('UPDATE', table, duration, false, typedResult.error.message);
         return {
           data: null,
-          error: result.error.message,
+          error: typedResult.error.message,
           success: false,
           timestamp: new Date().toISOString(),
         };
@@ -306,13 +317,13 @@ export class APIGateway {
       await this.logAPICall('UPDATE', table, duration, true);
 
       return {
-        data: result.data,
+        data: typedResult.data,
         error: null,
         success: true,
         timestamp: new Date().toISOString(),
       };
 
-    } catch (error) {
+    } catch (error: any) {
       const duration = performance.now() - startTime;
       await this.logAPICall('UPDATE', table, duration, false, error.message);
       
@@ -326,7 +337,7 @@ export class APIGateway {
   }
 
   public async delete<T>(
-    table: string,
+    table: TableName,
     filters: Record<string, any>
   ): Promise<APIResponse<T>> {
     const startTime = performance.now();
@@ -348,12 +359,13 @@ export class APIGateway {
       });
 
       const duration = performance.now() - startTime;
+      const typedResult = result as SupabaseResponse<T>;
 
-      if (result.error) {
-        await this.logAPICall('DELETE', table, duration, false, result.error.message);
+      if (typedResult.error) {
+        await this.logAPICall('DELETE', table, duration, false, typedResult.error.message);
         return {
           data: null,
-          error: result.error.message,
+          error: typedResult.error.message,
           success: false,
           timestamp: new Date().toISOString(),
         };
@@ -365,13 +377,13 @@ export class APIGateway {
       await this.logAPICall('DELETE', table, duration, true);
 
       return {
-        data: result.data,
+        data: typedResult.data,
         error: null,
         success: true,
         timestamp: new Date().toISOString(),
       };
 
-    } catch (error) {
+    } catch (error: any) {
       const duration = performance.now() - startTime;
       await this.logAPICall('DELETE', table, duration, false, error.message);
       
