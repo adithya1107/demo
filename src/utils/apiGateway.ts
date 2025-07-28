@@ -1,4 +1,3 @@
-
 import { supabase } from '@/integrations/supabase/client';
 import { dbSecurityValidator } from './databaseSecurity';
 import { auditLogger } from './auditLogger';
@@ -19,10 +18,8 @@ export interface APIConfig {
   cacheTimeout: number;
 }
 
-// Type for valid table names
 type TableName = keyof Database['public']['Tables'];
 
-// Query options interface
 export interface QueryOptions {
   select?: string;
   filters?: Record<string, any>;
@@ -34,7 +31,6 @@ export interface QueryOptions {
   offset?: number;
 }
 
-// Cache entry interface
 interface CacheEntry {
   data: any;
   timestamp: number;
@@ -80,7 +76,9 @@ export class APIGateway {
       return await operation();
     } catch (error) {
       if (retries > 0) {
-        await new Promise(resolve => setTimeout(resolve, 1000 * (this.config.retries - retries + 1)));
+        await new Promise((resolve) =>
+          setTimeout(resolve, 1000 * (this.config.retries - retries + 1))
+        );
         return this.executeWithRetry(operation, retries - 1);
       }
       throw error;
@@ -106,30 +104,34 @@ export class APIGateway {
     }
   }
 
-  private buildSelectQuery(table: TableName, query: QueryOptions): any {
-    let queryBuilder = supabase.from(table).select(query.select || '*');
+  private buildSelectQuery(
+    table: TableName,
+    query: QueryOptions
+  ): any {
+    // Force `any` on query builder to avoid excessive deep-typing
+    let queryBuilder: any = supabase.from(table).select(query.select || '*');
 
-    // Apply filters
     if (query.filters) {
       Object.entries(query.filters).forEach(([key, value]) => {
         queryBuilder = queryBuilder.eq(key, value);
       });
     }
 
-    // Apply ordering
     if (query.order) {
-      queryBuilder = queryBuilder.order(query.order.column, { 
-        ascending: query.order.ascending ?? true 
+      queryBuilder = queryBuilder.order(query.order.column, {
+        ascending: query.order.ascending ?? true,
       });
     }
 
-    // Apply pagination
     if (query.limit) {
       queryBuilder = queryBuilder.limit(query.limit);
     }
 
     if (query.offset) {
-      queryBuilder = queryBuilder.range(query.offset, query.offset + (query.limit || 10) - 1);
+      queryBuilder = queryBuilder.range(
+        query.offset,
+        query.offset + (query.limit || 10) - 1
+      );
     }
 
     return queryBuilder;
@@ -144,12 +146,11 @@ export class APIGateway {
     const cacheKey = this.generateCacheKey(table, query);
 
     try {
-      // Check cache first
       if (useCache && this.config.enableCaching && this.cache.has(cacheKey)) {
         const cachedEntry = this.cache.get(cacheKey)!;
         if (this.isValidCacheEntry(cachedEntry)) {
           return {
-            data: cachedEntry.data,
+            data: cachedEntry.data as T[],
             error: null,
             success: true,
             timestamp: new Date().toISOString(),
@@ -157,65 +158,46 @@ export class APIGateway {
         }
       }
 
-      // Check if same request is already in progress
       if (this.requestQueue.has(cacheKey)) {
-        const result = await this.requestQueue.get(cacheKey);
-        return result;
+        return this.requestQueue.get(cacheKey)! as Promise<APIResponse<T[]>>;
       }
 
-      // Create new request
-      const requestPromise = this.executeWithRetry(async () => {
-        const queryBuilder = this.buildSelectQuery(table, query);
-        return await dbSecurityValidator.validateAndExecuteQuery(
-          queryBuilder,
+      const requestPromise = this.executeWithRetry<APIResponse<T[]>>(async () => {
+        // Build and execute query
+        const builder: any = this.buildSelectQuery(table, query);
+        const result = await dbSecurityValidator.validateAndExecuteQuery(
+          builder as Promise<any>,
           'select',
           `${table}_select`
         );
+        return {
+          data: result as T[],
+          error: null,
+          success: true,
+          timestamp: new Date().toISOString(),
+        };
       });
 
-      // Store in request queue
       this.requestQueue.set(cacheKey, requestPromise);
-
       const result = await requestPromise;
-      
-      // Remove from queue
       this.requestQueue.delete(cacheKey);
 
       const duration = performance.now() - startTime;
+      await this.logAPICall('SELECT', table, duration, true);
 
-      if (!result) {
-        await this.logAPICall('SELECT', table, duration, false, 'No data returned');
-        return {
-          data: null,
-          error: 'No data returned',
-          success: false,
-          timestamp: new Date().toISOString(),
-        };
-      }
-
-      // Cache successful result
-      if (useCache && this.config.enableCaching) {
+      if (useCache && this.config.enableCaching && result.data) {
         this.cache.set(cacheKey, {
-          data: result,
+          data: result.data,
           timestamp: Date.now(),
           ttl: this.config.cacheTimeout,
         });
       }
 
-      await this.logAPICall('SELECT', table, duration, true);
-
-      return {
-        data: result,
-        error: null,
-        success: true,
-        timestamp: new Date().toISOString(),
-      };
-
+      return result;
     } catch (error: any) {
       this.requestQueue.delete(cacheKey);
       const duration = performance.now() - startTime;
       await this.logAPICall('SELECT', table, duration, false, error.message);
-      
       return {
         data: null,
         error: error.message,
@@ -234,49 +216,33 @@ export class APIGateway {
 
     try {
       const sanitizedData = dbSecurityValidator.sanitizeUserInput(data);
-      
-      const result = await this.executeWithRetry(async () => {
-        let queryBuilder = supabase.from(table).insert(sanitizedData);
-        
+
+      const result = await this.executeWithRetry<any>(async () => {
+        let builder: any = supabase.from(table).insert(sanitizedData);
         if (options.returning) {
-          queryBuilder = queryBuilder.select(options.returning);
+          builder = builder.select(options.returning);
         }
-        
-        return await dbSecurityValidator.validateAndExecuteQuery(
-          queryBuilder,
+        const response = await dbSecurityValidator.validateAndExecuteQuery(
+          builder as Promise<any>,
           'insert',
           `${table}_insert`
         );
+        return response;
       });
 
       const duration = performance.now() - startTime;
-
-      if (!result) {
-        await this.logAPICall('INSERT', table, duration, false, 'Insert failed');
-        return {
-          data: null,
-          error: 'Insert failed',
-          success: false,
-          timestamp: new Date().toISOString(),
-        };
-      }
-
-      // Clear related cache entries
-      this.clearCacheByTable(table);
-
       await this.logAPICall('INSERT', table, duration, true);
 
+      this.clearCacheByTable(table);
       return {
-        data: result,
+        data: result as T,
         error: null,
         success: true,
         timestamp: new Date().toISOString(),
       };
-
     } catch (error: any) {
       const duration = performance.now() - startTime;
       await this.logAPICall('INSERT', table, duration, false, error.message);
-      
       return {
         data: null,
         error: error.message,
@@ -296,54 +262,36 @@ export class APIGateway {
 
     try {
       const sanitizedData = dbSecurityValidator.sanitizeUserInput(data);
-      
-      const result = await this.executeWithRetry(async () => {
-        let queryBuilder = supabase.from(table).update(sanitizedData);
 
-        // Apply filters
+      const result = await this.executeWithRetry<any>(async () => {
+        let builder: any = supabase.from(table).update(sanitizedData);
         Object.entries(filters).forEach(([key, value]) => {
-          queryBuilder = queryBuilder.eq(key, value);
+          builder = builder.eq(key, value);
         });
-        
         if (options.returning) {
-          queryBuilder = queryBuilder.select(options.returning);
+          builder = builder.select(options.returning);
         }
-        
-        return await dbSecurityValidator.validateAndExecuteQuery(
-          queryBuilder,
+        const response = await dbSecurityValidator.validateAndExecuteQuery(
+          builder as Promise<any>,
           'update',
           `${table}_update`
         );
+        return response;
       });
 
       const duration = performance.now() - startTime;
-
-      if (!result) {
-        await this.logAPICall('UPDATE', table, duration, false, 'Update failed');
-        return {
-          data: null,
-          error: 'Update failed',
-          success: false,
-          timestamp: new Date().toISOString(),
-        };
-      }
-
-      // Clear related cache entries
-      this.clearCacheByTable(table);
-
       await this.logAPICall('UPDATE', table, duration, true);
 
+      this.clearCacheByTable(table);
       return {
-        data: result,
+        data: result as T,
         error: null,
         success: true,
         timestamp: new Date().toISOString(),
       };
-
     } catch (error: any) {
       const duration = performance.now() - startTime;
       await this.logAPICall('UPDATE', table, duration, false, error.message);
-      
       return {
         data: null,
         error: error.message,
@@ -360,49 +308,32 @@ export class APIGateway {
     const startTime = performance.now();
 
     try {
-      const result = await this.executeWithRetry(async () => {
-        let queryBuilder = supabase.from(table).delete();
-
-        // Apply filters
+      const result = await this.executeWithRetry<any>(async () => {
+        let builder: any = supabase.from(table).delete();
         Object.entries(filters).forEach(([key, value]) => {
-          queryBuilder = queryBuilder.eq(key, value);
+          builder = builder.eq(key, value);
         });
-
-        return await dbSecurityValidator.validateAndExecuteQuery(
-          queryBuilder,
+        const response = await dbSecurityValidator.validateAndExecuteQuery(
+          builder as Promise<any>,
           'delete',
           `${table}_delete`
         );
+        return response;
       });
 
       const duration = performance.now() - startTime;
-
-      if (!result) {
-        await this.logAPICall('DELETE', table, duration, false, 'Delete failed');
-        return {
-          data: null,
-          error: 'Delete failed',
-          success: false,
-          timestamp: new Date().toISOString(),
-        };
-      }
-
-      // Clear related cache entries
-      this.clearCacheByTable(table);
-
       await this.logAPICall('DELETE', table, duration, true);
 
+      this.clearCacheByTable(table);
       return {
-        data: result,
+        data: result as T,
         error: null,
         success: true,
         timestamp: new Date().toISOString(),
       };
-
     } catch (error: any) {
       const duration = performance.now() - startTime;
       await this.logAPICall('DELETE', table, duration, false, error.message);
-      
       return {
         data: null,
         error: error.message,
@@ -413,8 +344,9 @@ export class APIGateway {
   }
 
   private clearCacheByTable(table: string): void {
-    const keysToDelete = Array.from(this.cache.keys()).filter(key => key.startsWith(table));
-    keysToDelete.forEach(key => this.cache.delete(key));
+    Array.from(this.cache.keys())
+      .filter((key) => key.startsWith(table))
+      .forEach((key) => this.cache.delete(key));
   }
 
   public clearCache(): void {
