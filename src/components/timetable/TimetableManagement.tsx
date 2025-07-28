@@ -48,6 +48,40 @@ interface Room {
   updated_at: string;
 }
 
+// Raw data interfaces for database records
+interface RawTimetableSlot {
+  id: string;
+  course_id: string;
+  instructor_id: string;
+  room_id: string;
+  day_of_week: number;
+  start_time: string;
+  end_time: string;
+  slot_type: string;
+  academic_year: string;
+  semester: string;
+  is_active: boolean;
+}
+
+interface RawCourse {
+  id: string;
+  course_name: string;
+  course_code: string;
+}
+
+interface RawRoom {
+  id: string;
+  room_number: string;
+  building: string;
+  floor: number;
+}
+
+interface RawInstructor {
+  id: string;
+  first_name: string;
+  last_name: string;
+}
+
 const TimetableManagement: React.FC = () => {
   const { profile } = useUserProfile();
   const [timetableSlots, setTimetableSlots] = useState<TimetableSlot[]>([]);
@@ -75,7 +109,7 @@ const TimetableManagement: React.FC = () => {
     try {
       // First, get the basic timetable slots without relationships
       const { data: slotsData, error: slotsError } = await supabase
-        .from('timetable_slots' as any)
+        .from('timetable_slots')
         .select('*')
         .eq('is_active', true);
 
@@ -89,8 +123,11 @@ const TimetableManagement: React.FC = () => {
         return;
       }
 
+      // Type the raw data
+      const rawSlots = slotsData as RawTimetableSlot[];
+
       // Apply filtering based on user role before fetching related data
-      let filteredSlotsData = slotsData;
+      let filteredSlotsData = rawSlots;
 
       if (profile?.user_type === 'student') {
         try {
@@ -101,7 +138,7 @@ const TimetableManagement: React.FC = () => {
 
           if (enrollments && enrollments.length > 0) {
             const courseIds = enrollments.map(e => e.course_id);
-            filteredSlotsData = slotsData.filter(slot => courseIds.includes(slot.course_id));
+            filteredSlotsData = rawSlots.filter(slot => courseIds.includes(slot.course_id));
           } else {
             filteredSlotsData = [];
           }
@@ -109,7 +146,7 @@ const TimetableManagement: React.FC = () => {
           console.error('Error fetching enrollments:', enrollmentError);
         }
       } else if (profile?.user_type === 'faculty') {
-        filteredSlotsData = slotsData.filter(slot => slot.instructor_id === profile.id);
+        filteredSlotsData = rawSlots.filter(slot => slot.instructor_id === profile.id);
       }
 
       // Now fetch related data separately
@@ -125,7 +162,7 @@ const TimetableManagement: React.FC = () => {
 
       // Fetch rooms
       const { data: roomsData } = await supabase
-        .from('rooms' as any)
+        .from('rooms')
         .select('id, room_number, building, floor')
         .in('id', roomIds);
 
@@ -135,13 +172,18 @@ const TimetableManagement: React.FC = () => {
         .select('id, first_name, last_name')
         .in('id', instructorIds);
 
+      // Type the fetched data
+      const courses = (coursesData || []) as RawCourse[];
+      const roomsDataTyped = (roomsData || []) as RawRoom[];
+      const instructors = (instructorsData || []) as RawInstructor[];
+
       // Create lookup maps
-      const coursesMap = new Map((coursesData || []).map(course => [course.id, course]));
-      const roomsMap = new Map((roomsData || []).map(room => [room.id, room]));
-      const instructorsMap = new Map((instructorsData || []).map(instructor => [instructor.id, instructor]));
+      const coursesMap = new Map(courses.map(course => [course.id, course]));
+      const roomsMap = new Map(roomsDataTyped.map(room => [room.id, room]));
+      const instructorsMap = new Map(instructors.map(instructor => [instructor.id, instructor]));
 
       // Transform the data to match our interface
-      const transformedData: TimetableSlot[] = filteredSlotsData.map((slot: any) => ({
+      const transformedData: TimetableSlot[] = filteredSlotsData.map((slot) => ({
         id: slot.id,
         course_id: slot.course_id,
         instructor_id: slot.instructor_id,
@@ -173,7 +215,7 @@ const TimetableManagement: React.FC = () => {
   const fetchRooms = async () => {
     try {
       const { data, error } = await supabase
-        .from('rooms' as any)
+        .from('rooms')
         .select('*')
         .eq('college_id', profile?.college_id)
         .eq('is_available', true)
@@ -184,21 +226,9 @@ const TimetableManagement: React.FC = () => {
         throw error;
       }
 
-      // Transform the data to match our Room interface
-      const transformedRooms: Room[] = (data || []).map((room: any) => ({
-        id: room.id,
-        room_number: room.room_number,
-        building: room.building,
-        floor: room.floor,
-        capacity: room.capacity,
-        room_type: room.room_type,
-        is_available: room.is_available,
-        college_id: room.college_id,
-        created_at: room.created_at,
-        updated_at: room.updated_at
-      }));
-
-      setRooms(transformedRooms);
+      // Type the data properly
+      const roomsData = (data || []) as Room[];
+      setRooms(roomsData);
     } catch (error) {
       console.error('Error fetching rooms:', error);
     } finally {
@@ -311,10 +341,10 @@ const TimetableManagement: React.FC = () => {
                                     className="p-2 rounded text-xs border bg-card"
                                   >
                                     <div className="font-medium mb-1">
-                                      {slot.courses?.course_code || 'N/A'}
+                                      {slot.courses.course_code}
                                     </div>
                                     <div className="text-muted-foreground mb-1">
-                                      {slot.courses?.course_name || 'Unknown Course'}
+                                      {slot.courses.course_name}
                                     </div>
                                     <div className="flex items-center justify-between">
                                       <Badge className={getSlotTypeColor(slot.slot_type)}>
@@ -322,7 +352,7 @@ const TimetableManagement: React.FC = () => {
                                       </Badge>
                                       <div className="flex items-center space-x-1 text-muted-foreground">
                                         <MapPin className="h-3 w-3" />
-                                        <span>{slot.rooms?.room_number || 'TBD'}</span>
+                                        <span>{slot.rooms.room_number}</span>
                                       </div>
                                     </div>
                                     <div className="text-xs text-muted-foreground mt-1">
@@ -383,10 +413,10 @@ const TimetableManagement: React.FC = () => {
                               {getSlotIcon(slot.slot_type)}
                               <div>
                                 <h4 className="font-medium">
-                                  {slot.courses?.course_code || 'N/A'} - {slot.courses?.course_name || 'Unknown Course'}
+                                  {slot.courses.course_code} - {slot.courses.course_name}
                                 </h4>
                                 <p className="text-sm text-muted-foreground">
-                                  {slot.instructor?.first_name || 'Unknown'} {slot.instructor?.last_name || 'Instructor'}
+                                  {slot.instructor.first_name} {slot.instructor.last_name}
                                 </p>
                               </div>
                             </div>
@@ -405,7 +435,7 @@ const TimetableManagement: React.FC = () => {
                             <div className="flex items-center space-x-1">
                               <MapPin className="h-4 w-4" />
                               <span>
-                                {slot.rooms?.room_number || 'TBD'} - {slot.rooms?.building || 'Unknown Building'}
+                                {slot.rooms.room_number} - {slot.rooms.building}
                               </span>
                             </div>
                           </div>
@@ -455,7 +485,7 @@ const TimetableManagement: React.FC = () => {
                             {roomSlots.slice(0, 3).map(slot => (
                               <div key={slot.id} className="text-xs p-2 bg-muted rounded">
                                 <div className="font-medium">
-                                  {slot.courses?.course_code || 'N/A'}
+                                  {slot.courses.course_code}
                                 </div>
                                 <div className="text-muted-foreground">
                                   {daysOfWeek[slot.day_of_week]} {formatTime(slot.start_time)}
