@@ -1,100 +1,116 @@
 
-import React, { useEffect, useState } from 'react';
-import { Dialog, DialogContent, DialogHeader, DialogTitle } from '@/components/ui/dialog';
+import React, { useState, useEffect } from 'react';
+import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription } from '@/components/ui/dialog';
 import { Button } from '@/components/ui/button';
-import { AlertTriangle, Clock } from 'lucide-react';
-import { SessionManager } from '@/utils/sessionSecurity';
-import { useNavigate } from 'react-router-dom';
+import { Progress } from '@/components/ui/progress';
+import { Clock, AlertTriangle } from 'lucide-react';
+import { sessionManager } from '@/utils/sessionSecurity';
 
-const SessionTimeout: React.FC = () => {
+interface SessionTimeoutProps {
+  sessionId?: string;
+  onExtend?: () => void;
+  onLogout?: () => void;
+}
+
+const SessionTimeout: React.FC<SessionTimeoutProps> = ({ 
+  sessionId, 
+  onExtend, 
+  onLogout 
+}) => {
   const [showWarning, setShowWarning] = useState(false);
-  const [countdown, setCountdown] = useState(300); // 5 minutes in seconds
-  const navigate = useNavigate();
+  const [timeLeft, setTimeLeft] = useState(0);
+  const [isActive, setIsActive] = useState(true);
 
   useEffect(() => {
-    const sessionManager = SessionManager.getInstance();
-    
-    const handleWarning = () => {
-      setShowWarning(true);
-      setCountdown(300);
+    if (!sessionId) return;
+
+    const checkSession = () => {
+      const timeUntilExpiry = sessionManager.getTimeUntilExpiry(sessionId);
+      const shouldWarn = sessionManager.shouldShowWarning(sessionId);
+      
+      setTimeLeft(timeUntilExpiry);
+      setShowWarning(shouldWarn);
+
+      if (timeUntilExpiry <= 0) {
+        setIsActive(false);
+        handleLogout();
+      }
     };
 
-    const handleTimeout = () => {
+    const interval = setInterval(checkSession, 1000);
+    checkSession(); // Initial check
+
+    return () => clearInterval(interval);
+  }, [sessionId]);
+
+  const handleExtend = () => {
+    if (sessionId && sessionManager.extendSession(sessionId)) {
       setShowWarning(false);
-      navigate('/', { replace: true });
-    };
-
-    sessionManager.startSession(handleWarning, handleTimeout);
-
-    return () => {
-      sessionManager.endSession();
-    };
-  }, [navigate]);
-
-  useEffect(() => {
-    let interval: NodeJS.Timeout;
-    
-    if (showWarning && countdown > 0) {
-      interval = setInterval(() => {
-        setCountdown(prev => prev - 1);
-      }, 1000);
-    } else if (countdown === 0) {
-      // Session expired
-      setShowWarning(false);
-      navigate('/', { replace: true });
+      setIsActive(true);
+      onExtend?.();
     }
+  };
 
-    return () => {
-      if (interval) clearInterval(interval);
-    };
-  }, [showWarning, countdown, navigate]);
-
-  const handleExtendSession = () => {
-    const sessionManager = SessionManager.getInstance();
-    sessionManager.extendSession();
+  const handleLogout = () => {
+    if (sessionId) {
+      sessionManager.invalidateSession(sessionId);
+    }
     setShowWarning(false);
-    setCountdown(300);
+    setIsActive(false);
+    onLogout?.();
   };
 
-  const handleSignOut = () => {
-    const sessionManager = SessionManager.getInstance();
-    sessionManager.endSession();
-    setShowWarning(false);
-    navigate('/', { replace: true });
+  const formatTime = (milliseconds: number) => {
+    const minutes = Math.floor(milliseconds / 60000);
+    const seconds = Math.floor((milliseconds % 60000) / 1000);
+    return `${minutes}:${seconds.toString().padStart(2, '0')}`;
   };
 
-  const formatTime = (seconds: number): string => {
-    const mins = Math.floor(seconds / 60);
-    const secs = seconds % 60;
-    return `${mins}:${secs.toString().padStart(2, '0')}`;
+  const getProgressValue = () => {
+    const warningTime = 5 * 60 * 1000; // 5 minutes
+    return ((warningTime - timeLeft) / warningTime) * 100;
   };
+
+  if (!showWarning || !isActive) return null;
 
   return (
     <Dialog open={showWarning} onOpenChange={() => {}}>
       <DialogContent className="sm:max-w-md">
         <DialogHeader>
-          <DialogTitle className="flex items-center gap-2">
-            <AlertTriangle className="h-5 w-5 text-amber-500" />
-            Session Expiring Soon
+          <DialogTitle className="flex items-center space-x-2">
+            <AlertTriangle className="h-5 w-5 text-yellow-500" />
+            <span>Session Expiring Soon</span>
           </DialogTitle>
+          <DialogDescription>
+            Your session will expire in {formatTime(timeLeft)}. 
+            Would you like to extend your session?
+          </DialogDescription>
         </DialogHeader>
-        
-        <div className="text-center space-y-4">
-          <div className="flex items-center justify-center gap-2 text-lg font-semibold">
-            <Clock className="h-5 w-5 text-red-500" />
-            <span className="text-red-500">{formatTime(countdown)}</span>
+
+        <div className="space-y-4">
+          <div className="flex items-center space-x-2">
+            <Clock className="h-4 w-4 text-muted-foreground" />
+            <span className="text-sm text-muted-foreground">
+              Time remaining: {formatTime(timeLeft)}
+            </span>
           </div>
-          
-          <p className="text-muted-foreground">
-            Your session will expire soon due to inactivity. Would you like to extend your session?
-          </p>
-          
-          <div className="flex gap-2 justify-center">
-            <Button onClick={handleExtendSession} className="flex-1">
+
+          <Progress value={getProgressValue()} className="w-full" />
+
+          <div className="flex space-x-2">
+            <Button 
+              onClick={handleExtend} 
+              className="flex-1"
+              variant="default"
+            >
               Extend Session
             </Button>
-            <Button onClick={handleSignOut} variant="outline" className="flex-1">
-              Sign Out
+            <Button 
+              onClick={handleLogout} 
+              className="flex-1"
+              variant="outline"
+            >
+              Logout
             </Button>
           </div>
         </div>

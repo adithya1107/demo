@@ -1,179 +1,131 @@
-
 import { auditLogger } from './auditLogger';
 
-interface ThreatReport {
-  type: 'brute_force' | 'suspicious_activity' | 'privilege_escalation' | 'data_breach';
+export interface SecurityThreat {
+  id: string;
+  type: 'brute_force' | 'xss_attempt' | 'sql_injection' | 'csrf' | 'suspicious_activity';
   severity: 'low' | 'medium' | 'high' | 'critical';
   description: string;
-  userId?: string;
+  timestamp: Date;
   userAgent?: string;
-  metadata?: Record<string, any>;
+  ipAddress?: string;
+  userId?: string;
+  blocked: boolean;
 }
 
-interface RateLimitConfig {
-  maxAttempts: number;
-  windowMs: number;
+export interface SecurityMetrics {
+  totalThreats: number;
+  blockedThreats: number;
+  criticalThreats: number;
+  lastThreatTime?: Date;
 }
 
-class SecurityMonitor {
-  private rateLimits: Map<string, number[]> = new Map();
-  private suspiciousPatterns: RegExp[] = [
-    /(<script[^>]*>.*?<\/script>)/gi,
-    /(javascript:\s*[^;]*)/gi,
-    /(on\w+\s*=\s*["'][^"']*["'])/gi,
-    /(eval\s*\([^)]*\))/gi,
-    /(document\.write)/gi,
-    /(window\.location)/gi,
-    /(cookie)/gi,
-    /(localStorage)/gi,
-    /(sessionStorage)/gi,
-    /(innerHTML)/gi,
-    /(outerHTML)/gi
-  ];
+export class SecurityMonitor {
+  private static instance: SecurityMonitor;
+  private threats: SecurityThreat[] = [];
+  private maxThreats = 1000; // Keep last 1000 threats
 
-  private defaultRateLimit: RateLimitConfig = {
-    maxAttempts: 10,
-    windowMs: 60 * 1000 // 1 minute
-  };
+  private constructor() {}
 
-  async checkRateLimit(
-    identifier: string, 
-    config: RateLimitConfig = this.defaultRateLimit
-  ): Promise<boolean> {
-    try {
-      const now = Date.now();
-      const attempts = this.rateLimits.get(identifier) || [];
-      
-      // Remove old attempts outside the window
-      const validAttempts = attempts.filter(time => now - time < config.windowMs);
-      
-      if (validAttempts.length >= config.maxAttempts) {
-        await this.reportThreat({
-          type: 'brute_force',
-          severity: 'high',
-          description: `Rate limit exceeded for identifier: ${identifier}`,
-          metadata: {
-            attempts: validAttempts.length,
-            maxAttempts: config.maxAttempts,
-            windowMs: config.windowMs
-          }
-        });
-        return false;
-      }
-      
-      // Add current attempt
-      validAttempts.push(now);
-      this.rateLimits.set(identifier, validAttempts);
-      
-      return true;
-    } catch (error) {
-      console.error('Rate limit check error:', error);
-      return true; // Allow on error to prevent blocking legitimate users
+  public static getInstance(): SecurityMonitor {
+    if (!SecurityMonitor.instance) {
+      SecurityMonitor.instance = new SecurityMonitor();
     }
+    return SecurityMonitor.instance;
   }
 
-  async detectInjectionAttempt(input: string, context: string): Promise<boolean> {
-    try {
-      const hasSuspiciousPattern = this.suspiciousPatterns.some(pattern => 
-        pattern.test(input)
-      );
+  public logThreat(threat: Omit<SecurityThreat, 'id' | 'timestamp'>): void {
+    const newThreat: SecurityThreat = {
+      ...threat,
+      id: crypto.randomUUID(),
+      timestamp: new Date()
+    };
 
-      if (hasSuspiciousPattern) {
-        await this.reportThreat({
-          type: 'suspicious_activity',
-          severity: 'medium',
-          description: `Potential injection attempt detected in ${context}`,
-          metadata: {
-            input: input.substring(0, 100), // Truncate for logging
-            context
-          }
-        });
-        return true;
-      }
-
-      return false;
-    } catch (error) {
-      console.error('Injection detection error:', error);
-      return false;
-    }
-  }
-
-  async reportThreat(threat: ThreatReport): Promise<void> {
-    try {
-      console.warn('Security threat detected:', threat);
-      
-      // Log to audit system
-      await auditLogger.logSecurityEvent(
-        threat.type,
-        threat.description,
-        threat.severity,
-        threat.userId,
-        threat.metadata
-      );
-
-      // In a production environment, you might want to:
-      // 1. Send to external security monitoring service
-      // 2. Alert administrators
-      // 3. Implement automatic blocking
-      // 4. Update WAF rules
-      
-      // For now, we'll just log to console and audit
-      if (threat.severity === 'critical' || threat.severity === 'high') {
-        console.error('HIGH SEVERITY THREAT:', threat);
-      }
-    } catch (error) {
-      console.error('Failed to report threat:', error);
-    }
-  }
-
-  async validateUserAction(
-    userId: string,
-    action: string,
-    resource: string,
-    metadata?: Record<string, any>
-  ): Promise<boolean> {
-    try {
-      // Basic validation - can be extended with more complex rules
-      if (!userId || !action || !resource) {
-        await this.reportThreat({
-          type: 'suspicious_activity',
-          severity: 'medium',
-          description: 'Invalid user action parameters',
-          userId,
-          metadata: { action, resource, ...metadata }
-        });
-        return false;
-      }
-
-      // Log valid actions for audit trail
-      await auditLogger.logUserAction(action, `User action on ${resource}`, 'user_action', userId);
-      
-      return true;
-    } catch (error) {
-      console.error('User action validation error:', error);
-      return false;
-    }
-  }
-
-  clearRateLimit(identifier: string): void {
-    this.rateLimits.delete(identifier);
-  }
-
-  getRateLimitStatus(identifier: string): {
-    attempts: number;
-    remaining: number;
-    resetTime: number;
-  } {
-    const now = Date.now();
-    const attempts = this.rateLimits.get(identifier) || [];
-    const validAttempts = attempts.filter(time => now - time < this.defaultRateLimit.windowMs);
+    this.threats.unshift(newThreat);
     
+    // Keep only the latest threats
+    if (this.threats.length > this.maxThreats) {
+      this.threats = this.threats.slice(0, this.maxThreats);
+    }
+
+    // Log to audit system
+    auditLogger.logSecurityEvent(
+      threat.type,
+      threat.description,
+      threat.severity
+    );
+
+    console.warn('Security threat detected:', newThreat);
+  }
+
+  public getRecentThreats(limit: number = 10): SecurityThreat[] {
+    return this.threats.slice(0, limit);
+  }
+
+  public getMetrics(): SecurityMetrics {
+    const criticalThreats = this.threats.filter(t => t.severity === 'critical').length;
+    const blockedThreats = this.threats.filter(t => t.blocked).length;
+    const lastThreat = this.threats[0];
+
     return {
-      attempts: validAttempts.length,
-      remaining: Math.max(0, this.defaultRateLimit.maxAttempts - validAttempts.length),
-      resetTime: validAttempts.length > 0 ? Math.max(...validAttempts) + this.defaultRateLimit.windowMs : now
+      totalThreats: this.threats.length,
+      blockedThreats,
+      criticalThreats,
+      lastThreatTime: lastThreat?.timestamp
     };
   }
+
+  public clearThreats(): void {
+    this.threats = [];
+  }
+
+  public detectSQLInjection(input: string): boolean {
+    const sqlPatterns = [
+      /(\b(SELECT|INSERT|UPDATE|DELETE|DROP|CREATE|ALTER|EXEC|UNION)\b)/i,
+      /(\b(OR|AND)\s+\d+\s*=\s*\d+)/i,
+      /(--|#|\/\*|\*\/)/,
+      /(\b(SCRIPT|JAVASCRIPT|VBSCRIPT|ONLOAD|ONERROR)\b)/i
+    ];
+
+    const hasSQLPattern = sqlPatterns.some(pattern => pattern.test(input));
+    
+    if (hasSQLPattern) {
+      this.logThreat({
+        type: 'sql_injection',
+        severity: 'high',
+        description: `SQL injection attempt detected in input: ${input.substring(0, 100)}...`,
+        blocked: true
+      });
+    }
+
+    return hasSQLPattern;
+  }
+
+  public detectXSS(input: string): boolean {
+    const xssPatterns = [
+      /<script[^>]*>.*?<\/script>/gi,
+      /<iframe[^>]*>.*?<\/iframe>/gi,
+      /javascript:/gi,
+      /on\w+\s*=/gi,
+      /<img[^>]*src\s*=\s*["']javascript:/gi
+    ];
+
+    const hasXSSPattern = xssPatterns.some(pattern => pattern.test(input));
+    
+    if (hasXSSPattern) {
+      this.logThreat({
+        type: 'xss_attempt',
+        severity: 'high',
+        description: `XSS attempt detected in input: ${input.substring(0, 100)}...`,
+        blocked: true
+      });
+    }
+
+    return hasXSSPattern;
+  }
+
+  public validateInput(input: string): boolean {
+    return !this.detectSQLInjection(input) && !this.detectXSS(input);
+  }
 }
 
-export const securityMonitor = new SecurityMonitor();
+export const securityMonitor = SecurityMonitor.getInstance();
