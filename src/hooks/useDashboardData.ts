@@ -1,4 +1,3 @@
-
 import { useState, useEffect } from 'react';
 import { useUserProfile } from './useUserProfile';
 import { useNotifications } from './useNotifications';
@@ -43,7 +42,7 @@ export const useDashboardData = () => {
   const { courses, assignments } = useCourses();
   const { attendanceRecords, getAttendanceStatistics } = useAttendance();
   const { events, getUpcomingEvents, getUserRegistrations } = useEvents();
-  
+
   const [dashboardData, setDashboardData] = useState<DashboardData | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
@@ -57,7 +56,7 @@ export const useDashboardData = () => {
   const buildDashboardData = async () => {
     try {
       setLoading(true);
-      
+
       // Get additional statistics
       const gradeStats = getGradeStatistics();
       const feeStats = getFeeStatistics();
@@ -143,9 +142,9 @@ export const useDashboardData = () => {
     if (profile?.user_type === 'student') {
       widgets.push(
         { id: 'grade-overview', title: 'Grade Overview', type: 'chart', data: grades },
-        { id: 'attendance-summary', title: 'Attendance Summary', type: 'progress', data: attendanceStats },
+        { id: 'attendance-summary', title: 'Attendance Summary', type: 'progress', data: getAttendanceStatistics() },
         { id: 'upcoming-assignments', title: 'Upcoming Assignments', type: 'list', data: assignments },
-        { id: 'fee-status', title: 'Fee Status', type: 'summary', data: feeStats }
+        { id: 'fee-status', title: 'Fee Status', type: 'summary', data: getFeeStatistics() }
       );
     } else if (profile?.user_type === 'faculty') {
       widgets.push(
