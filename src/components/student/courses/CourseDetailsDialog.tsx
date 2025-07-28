@@ -38,11 +38,18 @@ const CourseDetailsDialog: React.FC<CourseDetailsDialogProps> = ({
     window.open(certificateUrl, '_blank');
   };
 
-  // Handler that matches the expected signature for AssignmentSubmissionForm
-  const handleAssignmentSubmission = async (text: string, fileUrl?: string, assignmentId?: string) => {
-    if (assignmentId) {
-      await onSubmitAssignment(assignmentId, text, fileUrl);
-    }
+  // Create a wrapper component that handles the assignment submission
+  const AssignmentSubmissionWrapper: React.FC<{ assignment: any }> = ({ assignment }) => {
+    const handleSubmit = async (text: string, fileUrl?: string) => {
+      await onSubmitAssignment(assignment.id, text, fileUrl);
+    };
+
+    return (
+      <AssignmentSubmissionForm 
+        assignment={assignment}
+        onSubmit={handleSubmit}
+      />
+    );
   };
 
   if (!course) return null;
@@ -134,12 +141,7 @@ const CourseDetailsDialog: React.FC<CourseDetailsDialogProps> = ({
                             )}
                           </div>
                         ) : !isOverdue && (
-                          <AssignmentSubmissionForm 
-                            assignment={assignment}
-                            onSubmit={(text: string, fileUrl?: string) => 
-                              handleAssignmentSubmission(text, fileUrl, assignment.id)
-                            }
-                          />
+                          <AssignmentSubmissionWrapper assignment={assignment} />
                         )}
                       </CardContent>
                     </Card>
