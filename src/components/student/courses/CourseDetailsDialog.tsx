@@ -38,20 +38,6 @@ const CourseDetailsDialog: React.FC<CourseDetailsDialogProps> = ({
     window.open(certificateUrl, '_blank');
   };
 
-  // Create a wrapper component that handles the assignment submission
-  const AssignmentSubmissionWrapper: React.FC<{ assignment: any }> = ({ assignment }) => {
-    const handleSubmit = async (text: string, fileUrl?: string) => {
-      await onSubmitAssignment(assignment.id, text, fileUrl);
-    };
-
-    return (
-      <AssignmentSubmissionForm 
-        assignment={assignment}
-        onSubmit={handleSubmit}
-      />
-    );
-  };
-
   if (!course) return null;
 
   return (
@@ -141,7 +127,10 @@ const CourseDetailsDialog: React.FC<CourseDetailsDialogProps> = ({
                             )}
                           </div>
                         ) : !isOverdue && (
-                          <AssignmentSubmissionWrapper assignment={assignment} />
+                          <AssignmentSubmissionForm 
+                            assignment={assignment}
+                            onSubmitAssignment={onSubmitAssignment}
+                          />
                         )}
                       </CardContent>
                     </Card>
