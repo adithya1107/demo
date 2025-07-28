@@ -1,4 +1,3 @@
-
 import React, { useState, useEffect } from 'react';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
@@ -20,6 +19,7 @@ interface TimetableSlot {
   slot_type: string;
   academic_year: string;
   semester: string;
+  is_active: boolean;
   courses: {
     course_name: string;
     course_code: string;
@@ -43,6 +43,36 @@ interface Room {
   capacity: number;
   room_type: string;
   is_available: boolean;
+  college_id: string;
+  created_at: string;
+  updated_at: string;
+}
+
+interface Course {
+  course_name: string;
+  course_code: string;
+}
+
+interface UserProfile {
+  first_name: string;
+  last_name: string;
+}
+
+interface TimetableSlotResponse {
+  id: string;
+  course_id: string;
+  instructor_id: string;
+  room_id: string;
+  day_of_week: number;
+  start_time: string;
+  end_time: string;
+  slot_type: string;
+  academic_year: string;
+  semester: string;
+  is_active: boolean;
+  courses: Course;
+  rooms: Room;
+  instructor: UserProfile;
 }
 
 const TimetableManagement: React.FC = () => {
@@ -70,15 +100,16 @@ const TimetableManagement: React.FC = () => {
 
   const fetchTimetableSlots = async () => {
     try {
-      let query = supabase
-        .from('timetable_slots')
+      // Use a more generic approach to avoid type issues
+      const { data, error } = await supabase
+        .from('timetable_slots' as any)
         .select(`
           *,
-          courses (
+          courses!timetable_slots_course_id_fkey (
             course_name,
             course_code
           ),
-          rooms (
+          rooms!timetable_slots_room_id_fkey (
             room_number,
             building,
             floor
@@ -90,27 +121,51 @@ const TimetableManagement: React.FC = () => {
         `)
         .eq('is_active', true);
 
-      // Filter based on user role
-      if (profile?.user_type === 'student') {
-        // Get enrolled courses for student
-        const { data: enrollments } = await supabase
-          .from('enrollments')
-          .select('course_id')
-          .eq('student_id', profile.id);
-
-        if (enrollments && enrollments.length > 0) {
-          const courseIds = enrollments.map(e => e.course_id);
-          query = query.in('course_id', courseIds);
-        }
-      } else if (profile?.user_type === 'faculty') {
-        // Get courses taught by faculty
-        query = query.eq('instructor_id', profile.id);
+      if (error) {
+        console.error('Supabase error:', error);
+        throw error;
       }
 
-      const { data, error } = await query;
+      let filteredData = data || [];
 
-      if (error) throw error;
-      setTimetableSlots(data || []);
+      // Apply filtering based on user role
+      if (profile?.user_type === 'student') {
+        try {
+          const { data: enrollments } = await supabase
+            .from('enrollments')
+            .select('course_id')
+            .eq('student_id', profile.id);
+
+          if (enrollments && enrollments.length > 0) {
+            const courseIds = enrollments.map(e => e.course_id);
+            filteredData = filteredData.filter(slot => courseIds.includes(slot.course_id));
+          }
+        } catch (enrollmentError) {
+          console.error('Error fetching enrollments:', enrollmentError);
+        }
+      } else if (profile?.user_type === 'faculty') {
+        filteredData = filteredData.filter(slot => slot.instructor_id === profile.id);
+      }
+
+      // Transform the data to match our interface
+      const transformedData: TimetableSlot[] = filteredData.map((slot: any) => ({
+        id: slot.id,
+        course_id: slot.course_id,
+        instructor_id: slot.instructor_id,
+        room_id: slot.room_id,
+        day_of_week: slot.day_of_week,
+        start_time: slot.start_time,
+        end_time: slot.end_time,
+        slot_type: slot.slot_type,
+        academic_year: slot.academic_year,
+        semester: slot.semester,
+        is_active: slot.is_active,
+        courses: slot.courses || { course_name: 'Unknown', course_code: 'N/A' },
+        rooms: slot.rooms || { room_number: 'Unknown', building: 'Unknown', floor: 0 },
+        instructor: slot.instructor || { first_name: 'Unknown', last_name: 'Instructor' }
+      }));
+
+      setTimetableSlots(transformedData);
     } catch (error) {
       console.error('Error fetching timetable slots:', error);
       toast({
@@ -124,14 +179,32 @@ const TimetableManagement: React.FC = () => {
   const fetchRooms = async () => {
     try {
       const { data, error } = await supabase
-        .from('rooms')
+        .from('rooms' as any)
         .select('*')
         .eq('college_id', profile?.college_id)
         .eq('is_available', true)
         .order('building', { ascending: true });
 
-      if (error) throw error;
-      setRooms(data || []);
+      if (error) {
+        console.error('Supabase error:', error);
+        throw error;
+      }
+
+      // Transform the data to match our Room interface
+      const transformedRooms: Room[] = (data || []).map((room: any) => ({
+        id: room.id,
+        room_number: room.room_number,
+        building: room.building,
+        floor: room.floor,
+        capacity: room.capacity,
+        room_type: room.room_type,
+        is_available: room.is_available,
+        college_id: room.college_id,
+        created_at: room.created_at,
+        updated_at: room.updated_at
+      }));
+
+      setRooms(transformedRooms);
     } catch (error) {
       console.error('Error fetching rooms:', error);
     } finally {
@@ -177,10 +250,14 @@ const TimetableManagement: React.FC = () => {
   };
 
   const formatTime = (time: string) => {
-    return new Date(`1970-01-01T${time}`).toLocaleTimeString([], {
-      hour: '2-digit',
-      minute: '2-digit'
-    });
+    try {
+      return new Date(`1970-01-01T${time}`).toLocaleTimeString([], {
+        hour: '2-digit',
+        minute: '2-digit'
+      });
+    } catch {
+      return time; // Return original time if formatting fails
+    }
   };
 
   if (loading) {
@@ -240,10 +317,10 @@ const TimetableManagement: React.FC = () => {
                                     className="p-2 rounded text-xs border bg-card"
                                   >
                                     <div className="font-medium mb-1">
-                                      {slot.courses.course_code}
+                                      {slot.courses?.course_code || 'N/A'}
                                     </div>
                                     <div className="text-muted-foreground mb-1">
-                                      {slot.courses.course_name}
+                                      {slot.courses?.course_name || 'Unknown Course'}
                                     </div>
                                     <div className="flex items-center justify-between">
                                       <Badge className={getSlotTypeColor(slot.slot_type)}>
@@ -251,7 +328,7 @@ const TimetableManagement: React.FC = () => {
                                       </Badge>
                                       <div className="flex items-center space-x-1 text-muted-foreground">
                                         <MapPin className="h-3 w-3" />
-                                        <span>{slot.rooms.room_number}</span>
+                                        <span>{slot.rooms?.room_number || 'TBD'}</span>
                                       </div>
                                     </div>
                                     <div className="text-xs text-muted-foreground mt-1">
@@ -312,10 +389,10 @@ const TimetableManagement: React.FC = () => {
                               {getSlotIcon(slot.slot_type)}
                               <div>
                                 <h4 className="font-medium">
-                                  {slot.courses.course_code} - {slot.courses.course_name}
+                                  {slot.courses?.course_code || 'N/A'} - {slot.courses?.course_name || 'Unknown Course'}
                                 </h4>
                                 <p className="text-sm text-muted-foreground">
-                                  {slot.instructor.first_name} {slot.instructor.last_name}
+                                  {slot.instructor?.first_name || 'Unknown'} {slot.instructor?.last_name || 'Instructor'}
                                 </p>
                               </div>
                             </div>
@@ -334,7 +411,7 @@ const TimetableManagement: React.FC = () => {
                             <div className="flex items-center space-x-1">
                               <MapPin className="h-4 w-4" />
                               <span>
-                                {slot.rooms.room_number} - {slot.rooms.building}
+                                {slot.rooms?.room_number || 'TBD'} - {slot.rooms?.building || 'Unknown Building'}
                               </span>
                             </div>
                           </div>
@@ -384,7 +461,7 @@ const TimetableManagement: React.FC = () => {
                             {roomSlots.slice(0, 3).map(slot => (
                               <div key={slot.id} className="text-xs p-2 bg-muted rounded">
                                 <div className="font-medium">
-                                  {slot.courses.course_code}
+                                  {slot.courses?.course_code || 'N/A'}
                                 </div>
                                 <div className="text-muted-foreground">
                                   {daysOfWeek[slot.day_of_week]} {formatTime(slot.start_time)}
