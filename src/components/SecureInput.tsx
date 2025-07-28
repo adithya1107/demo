@@ -1,9 +1,8 @@
 
 import React, { forwardRef, useCallback, useState } from 'react';
 import { Input } from '@/components/ui/input';
-import { sanitizeInput } from '@/utils/security';
-import { useSecurityContext } from '@/components/SecurityProvider';
 import { AlertTriangle } from 'lucide-react';
+import { securityMonitor } from '@/utils/securityMonitor';
 
 interface SecureInputProps extends React.InputHTMLAttributes<HTMLInputElement> {
   maxLength?: number;
@@ -19,8 +18,17 @@ const SecureInput = forwardRef<HTMLInputElement, SecureInputProps>(
     onSecurityViolation,
     ...props 
   }, ref) => {
-    const { reportSecurityViolation } = useSecurityContext();
     const [hasSecurityWarning, setHasSecurityWarning] = useState(false);
+
+    const reportSecurityViolation = (violation: string, metadata?: any) => {
+      securityMonitor.reportThreat({
+        type: 'suspicious_activity',
+        severity: 'medium',
+        description: violation,
+        blocked: false,
+        metadata
+      });
+    };
 
     const handleChange = useCallback((e: React.ChangeEvent<HTMLInputElement>) => {
       const rawValue = e.target.value;
@@ -80,7 +88,7 @@ const SecureInput = forwardRef<HTMLInputElement, SecureInputProps>(
       };
 
       onChange?.(sanitizedEvent);
-    }, [onChange, maxLength, allowedChars, onSecurityViolation, reportSecurityViolation]);
+    }, [onChange, maxLength, allowedChars, onSecurityViolation]);
 
     return (
       <div className="relative">

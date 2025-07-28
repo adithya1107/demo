@@ -5,7 +5,6 @@ import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Scan, CheckCircle } from 'lucide-react';
-import { supabase } from '@/integrations/supabase/client';
 import { toast } from '@/components/ui/use-toast';
 import { useUserProfile } from '@/hooks/useUserProfile';
 
@@ -40,15 +39,13 @@ const QRCodeScanner: React.FC<QRCodeScannerProps> = ({ onSuccess, activeSessions
 
     setLoading(true);
     try {
-      // Find the session with this QR code
-      const { data: session, error: sessionError } = await supabase
-        .from('attendance_sessions')
-        .select('*')
-        .eq('qr_code', qrCode)
-        .eq('is_active', true)
-        .single();
+      // Mock attendance marking
+      await new Promise(resolve => setTimeout(resolve, 1000));
 
-      if (sessionError || !session) {
+      // Simulate validation
+      const validQRCodes = ['ATTEND_123456', 'ATTEND_789012'];
+      
+      if (!validQRCodes.includes(qrCode)) {
         toast({
           title: 'Invalid QR Code',
           description: 'QR code not found or session is inactive',
@@ -56,55 +53,6 @@ const QRCodeScanner: React.FC<QRCodeScannerProps> = ({ onSuccess, activeSessions
         });
         return;
       }
-
-      // Check if student is enrolled in the course
-      const { data: enrollment, error: enrollmentError } = await supabase
-        .from('enrollments')
-        .select('*')
-        .eq('course_id', session.course_id)
-        .eq('student_id', profile.id)
-        .single();
-
-      if (enrollmentError || !enrollment) {
-        toast({
-          title: 'Not Enrolled',
-          description: 'You are not enrolled in this course',
-          variant: 'destructive'
-        });
-        return;
-      }
-
-      // Check if attendance already marked
-      const { data: existingAttendance } = await supabase
-        .from('attendance')
-        .select('*')
-        .eq('session_id', session.id)
-        .eq('student_id', profile.id)
-        .single();
-
-      if (existingAttendance) {
-        toast({
-          title: 'Already Marked',
-          description: 'Your attendance has already been marked for this session',
-          variant: 'destructive'
-        });
-        return;
-      }
-
-      // Mark attendance
-      const { error: attendanceError } = await supabase
-        .from('attendance')
-        .insert({
-          session_id: session.id,
-          student_id: profile.id,
-          course_id: session.course_id,
-          class_date: session.session_date,
-          status: 'present',
-          marked_at: new Date().toISOString(),
-          location_verified: true
-        });
-
-      if (attendanceError) throw attendanceError;
 
       toast({
         title: 'Success',
@@ -126,13 +74,9 @@ const QRCodeScanner: React.FC<QRCodeScannerProps> = ({ onSuccess, activeSessions
   };
 
   const simulateQRScan = () => {
-    // For demo purposes, use the first active session's QR code
-    if (activeSessions.length > 0) {
-      const firstSession = activeSessions[0];
-      // Generate a mock QR code for demo
-      const mockQR = `ATTEND_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`;
-      setQrCode(mockQR);
-    }
+    // For demo purposes, use a mock QR code
+    const mockQR = 'ATTEND_123456';
+    setQrCode(mockQR);
   };
 
   return (

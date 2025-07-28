@@ -5,8 +5,7 @@ import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
-import { QrCode, Clock, MapPin } from 'lucide-react';
-import { supabase } from '@/integrations/supabase/client';
+import { QrCode } from 'lucide-react';
 import { toast } from '@/components/ui/use-toast';
 
 interface QRCodeGeneratorProps {
@@ -25,27 +24,14 @@ const QRCodeGenerator: React.FC<QRCodeGeneratorProps> = ({ onSessionCreated, ins
     location: ''
   });
 
-  const [courses, setCourses] = useState<any[]>([]);
   const [generatedQR, setGeneratedQR] = useState<string | null>(null);
 
-  React.useEffect(() => {
-    loadInstructorCourses();
-  }, [instructorId]);
-
-  const loadInstructorCourses = async () => {
-    try {
-      const { data, error } = await supabase
-        .from('courses')
-        .select('id, course_name, course_code')
-        .eq('instructor_id', instructorId)
-        .eq('is_active', true);
-
-      if (error) throw error;
-      setCourses(data || []);
-    } catch (error) {
-      console.error('Error loading courses:', error);
-    }
-  };
+  // Mock courses data
+  const courses = [
+    { id: '1', course_name: 'Mathematics 101', course_code: 'MATH101' },
+    { id: '2', course_name: 'Physics 201', course_code: 'PHYS201' },
+    { id: '3', course_name: 'Chemistry 301', course_code: 'CHEM301' }
+  ];
 
   const generateQRCode = async () => {
     if (!formData.courseId || !formData.sessionDate || !formData.startTime || !formData.endTime) {
@@ -62,23 +48,8 @@ const QRCodeGenerator: React.FC<QRCodeGeneratorProps> = ({ onSessionCreated, ins
       // Generate unique QR code
       const qrCode = `ATTEND_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`;
 
-      const { data, error } = await supabase
-        .from('attendance_sessions')
-        .insert({
-          course_id: formData.courseId,
-          instructor_id: instructorId,
-          session_date: formData.sessionDate,
-          start_time: formData.startTime,
-          end_time: formData.endTime,
-          topic: formData.topic,
-          room_location: formData.location,
-          qr_code: qrCode,
-          is_active: true
-        })
-        .select()
-        .single();
-
-      if (error) throw error;
+      // Mock saving to database
+      await new Promise(resolve => setTimeout(resolve, 1000));
 
       setGeneratedQR(qrCode);
       onSessionCreated();
