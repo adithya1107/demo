@@ -1,4 +1,3 @@
-
 import React, { useState, useEffect } from 'react';
 import { Card, CardContent } from '@/components/ui/card';
 import { BookOpen } from 'lucide-react';
@@ -8,19 +7,73 @@ import CourseCard from './courses/CourseCard';
 import CourseDetailsDialog from './courses/CourseDetailsDialog';
 import { useUserProfile } from '@/hooks/useUserProfile';
 
+// Define proper TypeScript interfaces
+interface Course {
+  id: string;
+  title: string;
+  description?: string;
+  instructor_id: string;
+  created_at: string;
+  updated_at: string;
+}
+
+interface LectureMaterial {
+  id: string;
+  course_id: string;
+  title: string;
+  content_url: string;
+  uploaded_at: string;
+}
+
+interface Assignment {
+  id: string;
+  course_id: string;
+  title: string;
+  description: string;
+  due_date: string;
+}
+
+interface Submission {
+  id: string;
+  assignment_id: string;
+  student_id: string;
+  submission_text: string;
+  file_url?: string;
+  submitted_at: string;
+}
+
+interface Grade {
+  id: string;
+  student_id: string;
+  course_id: string;
+  assignment_id?: string;
+  grade: number;
+  recorded_at: string;
+}
+
+interface Certificate {
+  id: string;
+  student_id: string;
+  course_id: string;
+  issued_at: string;
+  certificate_url?: string;
+}
+
 interface MyCoursesProps {
-  studentData?: any;
+  studentData?: {
+    user_id: string;
+  };
 }
 
 const MyCourses: React.FC<MyCoursesProps> = ({ studentData }) => {
   const { profile } = useUserProfile();
-  const [courses, setCourses] = useState([]);
-  const [selectedCourse, setSelectedCourse] = useState<any>(null);
-  const [lectureMaterials, setLectureMaterials] = useState([]);
-  const [assignments, setAssignments] = useState([]);
-  const [submissions, setSubmissions] = useState([]);
-  const [grades, setGrades] = useState([]);
-  const [certificates, setCertificates] = useState([]);
+  const [courses, setCourses] = useState<Course[]>([]);
+  const [selectedCourse, setSelectedCourse] = useState<Course | null>(null);
+  const [lectureMaterials, setLectureMaterials] = useState<LectureMaterial[]>([]);
+  const [assignments, setAssignments] = useState<Assignment[]>([]);
+  const [submissions, setSubmissions] = useState<Submission[]>([]);
+  const [grades, setGrades] = useState<Grade[]>([]);
+  const [certificates, setCertificates] = useState<Certificate[]>([]);
   const [loading, setLoading] = useState(true);
   const { toast } = useToast();
 
@@ -45,7 +98,7 @@ const MyCourses: React.FC<MyCoursesProps> = ({ studentData }) => {
 
       if (error) throw error;
 
-      setCourses(enrollmentsData?.map(e => e.courses) || []);
+      setCourses(enrollmentsData?.map(e => e.courses).filter(Boolean) || []);
     } catch (error) {
       console.error('Error fetching courses:', error);
       toast({
@@ -108,15 +161,20 @@ const MyCourses: React.FC<MyCoursesProps> = ({ studentData }) => {
 
     } catch (error) {
       console.error('Error fetching course details:', error);
+      toast({
+        title: 'Error',
+        description: 'Failed to fetch course details',
+        variant: 'destructive',
+      });
     }
   };
 
-  const handleViewCourseDetails = (course: any) => {
+  const handleViewCourseDetails = (course: Course) => {
     setSelectedCourse(course);
     fetchCourseDetails(course.id);
   };
 
-  const handleSubmitAssignment = async (assignmentId: string, submissionText: string, fileUrl?: string) => {
+  const handleSubmitAssignment = async (assignmentId: string, submissionText: string, fileUrl?: string): Promise<void> => {
     try {
       const { error } = await supabase
         .from('assignment_submissions')
@@ -169,7 +227,7 @@ const MyCourses: React.FC<MyCoursesProps> = ({ studentData }) => {
         </Card>
       ) : (
         <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
-          {courses.map((course: any) => (
+          {courses.map((course: Course) => (
             <CourseCard
               key={course.id}
               course={course}
@@ -179,17 +237,19 @@ const MyCourses: React.FC<MyCoursesProps> = ({ studentData }) => {
         </div>
       )}
 
-      <CourseDetailsDialog
-        course={selectedCourse}
-        isOpen={!!selectedCourse}
-        onClose={() => setSelectedCourse(null)}
-        lectureMaterials={lectureMaterials}
-        assignments={assignments}
-        submissions={submissions}
-        grades={grades}
-        certificates={certificates}
-        onSubmitAssignment={handleSubmitAssignment}
-      />
+      {selectedCourse && (
+        <CourseDetailsDialog
+          course={selectedCourse}
+          isOpen={!!selectedCourse}
+          onClose={() => setSelectedCourse(null)}
+          lectureMaterials={lectureMaterials}
+          assignments={assignments}
+          submissions={submissions}
+          grades={grades}
+          certificates={certificates}
+          onSubmitAssignment={handleSubmitAssignment}
+        />
+      )}
     </div>
   );
 };
