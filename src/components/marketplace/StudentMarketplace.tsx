@@ -3,11 +3,9 @@ import React, { useState, useEffect } from 'react';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
-import { Badge } from '@/components/ui/badge';
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger } from '@/components/ui/dialog';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
-import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
-import { Search, Plus, Star, Filter, ShoppingCart, User, Calendar, MapPin } from 'lucide-react';
+import { Search, Plus, ShoppingCart, User, Calendar } from 'lucide-react';
 import { useUserProfile } from '@/hooks/useUserProfile';
 import { supabase } from '@/integrations/supabase/client';
 import { toast } from '@/components/ui/use-toast';
@@ -21,13 +19,13 @@ interface MarketplaceItem {
   description: string;
   price: number;
   category: string;
-  condition: 'new' | 'like_new' | 'good' | 'fair' | 'poor';
+  condition: string;
   images: string[];
   seller_id: string;
   seller_name: string;
   seller_rating: number;
   college_id: string;
-  status: 'active' | 'sold' | 'reserved';
+  status: string;
   created_at: string;
   updated_at: string;
 }
@@ -67,29 +65,35 @@ const StudentMarketplace = () => {
     if (!profile?.college_id) return;
 
     try {
-      const { data, error } = await supabase
+      // Use direct query since the table now exists
+      const { data: rawItems, error } = await supabase
         .from('marketplace_items')
-        .select(`
-          *,
-          seller:user_profiles!seller_id(
-            first_name,
-            last_name,
-            user_code
-          )
-        `)
+        .select('*')
         .eq('college_id', profile.college_id)
         .eq('status', 'active')
         .order('created_at', { ascending: false });
 
       if (error) throw error;
 
-      const formattedItems: MarketplaceItem[] = data.map(item => ({
-        ...item,
-        seller_name: `${item.seller.first_name} ${item.seller.last_name}`,
-        seller_rating: 4.5 // TODO: Implement rating system
-      }));
+      // Get seller information
+      const itemsWithSellers = await Promise.all(
+        (rawItems || []).map(async (item) => {
+          const { data: seller } = await supabase
+            .from('user_profiles')
+            .select('first_name, last_name, user_code')
+            .eq('id', item.seller_id)
+            .single();
 
-      setItems(formattedItems);
+          return {
+            ...item,
+            seller_name: seller ? `${seller.first_name} ${seller.last_name}` : 'Unknown',
+            seller_rating: 4.5, // TODO: Implement rating system
+            images: item.images || []
+          } as MarketplaceItem;
+        })
+      );
+
+      setItems(itemsWithSellers);
     } catch (error) {
       console.error('Error loading marketplace items:', error);
       toast({
@@ -108,7 +112,7 @@ const StudentMarketplace = () => {
     if (searchQuery) {
       filtered = filtered.filter(item =>
         item.title.toLowerCase().includes(searchQuery.toLowerCase()) ||
-        item.description.toLowerCase().includes(searchQuery.toLowerCase())
+        item.description?.toLowerCase().includes(searchQuery.toLowerCase())
       );
     }
 
@@ -135,8 +139,7 @@ const StudentMarketplace = () => {
           buyer_id: profile?.id,
           seller_id: selectedItem.seller_id,
           amount: selectedItem.price,
-          status: 'completed',
-          college_id: profile?.college_id
+          status: 'completed'
         });
 
       if (error) throw error;
@@ -253,17 +256,6 @@ const StudentMarketplace = () => {
         <Card>
           <CardContent className="p-4">
             <div className="flex items-center space-x-2">
-              <Star className="h-5 w-5 text-yellow-500" />
-              <div>
-                <p className="text-sm text-muted-foreground">Categories</p>
-                <p className="text-2xl font-bold">{categories.length - 1}</p>
-              </div>
-            </div>
-          </CardContent>
-        </Card>
-        <Card>
-          <CardContent className="p-4">
-            <div className="flex items-center space-x-2">
               <Calendar className="h-5 w-5 text-blue-500" />
               <div>
                 <p className="text-sm text-muted-foreground">New Today</p>
@@ -272,6 +264,17 @@ const StudentMarketplace = () => {
                     new Date(item.created_at).toDateString() === new Date().toDateString()
                   ).length}
                 </p>
+              </div>
+            </div>
+          </CardContent>
+        </Card>
+        <Card>
+          <CardContent className="p-4">
+            <div className="flex items-center space-x-2">
+              <ShoppingCart className="h-5 w-5 text-yellow-500" />
+              <div>
+                <p className="text-sm text-muted-foreground">Categories</p>
+                <p className="text-2xl font-bold">{categories.length - 1}</p>
               </div>
             </div>
           </CardContent>

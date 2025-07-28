@@ -1,88 +1,115 @@
 
 import React, { useState, useEffect } from 'react';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
+import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
-import { QrCode, Scan, Users, Clock, MapPin, Calendar } from 'lucide-react';
+import { supabase } from '@/integrations/supabase/client';
 import { useUserProfile } from '@/hooks/useUserProfile';
 import { toast } from '@/components/ui/use-toast';
-import QRCodeGenerator from './QRCodeGenerator';
-import QRCodeScanner from './QRCodeScanner';
-import AttendanceAnalytics from './AttendanceAnalytics';
+import { QRCodeGenerator } from './QRCodeGenerator';
+import { QRCodeScanner } from './QRCodeScanner';
+import { Calendar, Clock, MapPin, Users, CheckCircle } from 'lucide-react';
 
 interface AttendanceSession {
   id: string;
   course_id: string;
-  course_name: string;
-  instructor_name: string;
   session_date: string;
   start_time: string;
   end_time: string;
+  topic: string;
   qr_code: string;
-  location: string;
-  total_students: number;
-  present_students: number;
   is_active: boolean;
+  course_name?: string;
+  instructor_name?: string;
+  room_location?: string;
 }
 
 const QRAttendanceSystem = () => {
   const { profile } = useUserProfile();
   const [sessions, setSessions] = useState<AttendanceSession[]>([]);
-  const [activeSessions, setActiveSessions] = useState<AttendanceSession[]>([]);
+  const [selectedSession, setSelectedSession] = useState<AttendanceSession | null>(null);
   const [loading, setLoading] = useState(true);
-  const [activeTab, setActiveTab] = useState('scanner');
 
   useEffect(() => {
-    loadAttendanceSessions();
+    loadSessions();
   }, [profile]);
 
-  const loadAttendanceSessions = async () => {
-    if (!profile) return;
+  const loadSessions = async () => {
+    if (!profile?.id) return;
 
     try {
-      // Mock data for now since attendance_sessions table doesn't exist in types
-      const mockSessions: AttendanceSession[] = [
-        {
-          id: '1',
-          course_id: '1',
-          course_name: 'Mathematics 101',
-          instructor_name: 'Dr. Smith',
-          session_date: new Date().toISOString().split('T')[0],
-          start_time: '09:00',
-          end_time: '10:30',
-          qr_code: 'ATTEND_123456',
-          location: 'Room 101',
-          total_students: 30,
-          present_students: 25,
-          is_active: true
-        },
-        {
-          id: '2',
-          course_id: '2',
-          course_name: 'Physics 201',
-          instructor_name: 'Prof. Johnson',
-          session_date: new Date().toISOString().split('T')[0],
-          start_time: '11:00',
-          end_time: '12:30',
-          qr_code: 'ATTEND_789012',
-          location: 'Lab 205',
-          total_students: 25,
-          present_students: 20,
-          is_active: true
-        }
-      ];
-
-      // Filter based on user type
       if (profile.user_type === 'faculty') {
-        setActiveTab('generate');
-      } else {
-        setActiveTab('scanner');
-      }
+        // Load sessions for faculty
+        const { data: sessionsData, error } = await supabase
+          .from('attendance_sessions')
+          .select(`
+            *,
+            courses:course_id (
+              course_name,
+              instructor_id
+            )
+          `)
+          .eq('instructor_id', profile.id)
+          .order('session_date', { ascending: false });
 
-      setSessions(mockSessions);
-      setActiveSessions(mockSessions.filter(s => s.is_active));
+        if (error) throw error;
+
+        const formattedSessions = (sessionsData || []).map(session => ({
+          ...session,
+          course_name: session.courses?.course_name || 'Unknown Course',
+          instructor_name: `${profile.first_name} ${profile.last_name}`
+        }));
+
+        setSessions(formattedSessions);
+      } else if (profile.user_type === 'student') {
+        // Load sessions for enrolled courses
+        const { data: enrollmentsData, error: enrollmentError } = await supabase
+          .from('enrollments')
+          .select(`
+            course_id,
+            courses:course_id (
+              id,
+              course_name,
+              instructor_id,
+              user_profiles:instructor_id (
+                first_name,
+                last_name
+              )
+            )
+          `)
+          .eq('student_id', profile.id)
+          .eq('status', 'enrolled');
+
+        if (enrollmentError) throw enrollmentError;
+
+        const courseIds = enrollmentsData?.map(e => e.course_id) || [];
+        
+        if (courseIds.length > 0) {
+          const { data: sessionsData, error } = await supabase
+            .from('attendance_sessions')
+            .select('*')
+            .in('course_id', courseIds)
+            .order('session_date', { ascending: false });
+
+          if (error) throw error;
+
+          const formattedSessions = (sessionsData || []).map(session => {
+            const courseInfo = enrollmentsData?.find(e => e.course_id === session.course_id);
+            return {
+              ...session,
+              course_name: courseInfo?.courses?.course_name || 'Unknown Course',
+              instructor_name: courseInfo?.courses?.user_profiles 
+                ? `${courseInfo.courses.user_profiles.first_name} ${courseInfo.courses.user_profiles.last_name}`
+                : 'Unknown Instructor'
+            };
+          });
+
+          setSessions(formattedSessions);
+        }
+      }
     } catch (error) {
-      console.error('Error loading attendance sessions:', error);
+      console.error('Error loading sessions:', error);
       toast({
         title: 'Error',
         description: 'Failed to load attendance sessions',
@@ -93,16 +120,103 @@ const QRAttendanceSystem = () => {
     }
   };
 
-  const handleSessionCreated = () => {
-    loadAttendanceSessions();
+  const handleCreateSession = async (sessionData: any) => {
+    if (!profile?.id) return;
+
+    try {
+      const qrCode = `${sessionData.course_id}-${Date.now()}`;
+      
+      const { error } = await supabase
+        .from('attendance_sessions')
+        .insert({
+          course_id: sessionData.course_id,
+          instructor_id: profile.id,
+          session_date: sessionData.date,
+          start_time: sessionData.start_time,
+          end_time: sessionData.end_time,
+          topic: sessionData.topic,
+          qr_code: qrCode,
+          room_location: sessionData.room_location,
+          is_active: true
+        });
+
+      if (error) throw error;
+
+      toast({
+        title: 'Success',
+        description: 'Attendance session created successfully',
+      });
+
+      loadSessions();
+    } catch (error) {
+      console.error('Error creating session:', error);
+      toast({
+        title: 'Error',
+        description: 'Failed to create attendance session',
+        variant: 'destructive'
+      });
+    }
   };
 
-  const handleAttendanceMarked = () => {
-    loadAttendanceSessions();
-    toast({
-      title: 'Success',
-      description: 'Attendance marked successfully!',
-    });
+  const handleScanSuccess = async (qrCode: string) => {
+    if (!profile?.id) return;
+
+    try {
+      // Find the session by QR code
+      const session = sessions.find(s => s.qr_code === qrCode);
+      if (!session) {
+        toast({
+          title: 'Error',
+          description: 'Invalid QR code or session not found',
+          variant: 'destructive'
+        });
+        return;
+      }
+
+      // Check if already marked attendance
+      const { data: existingAttendance } = await supabase
+        .from('attendance')
+        .select('id')
+        .eq('student_id', profile.id)
+        .eq('session_id', session.id)
+        .single();
+
+      if (existingAttendance) {
+        toast({
+          title: 'Already Marked',
+          description: 'Your attendance has already been recorded for this session',
+          variant: 'destructive'
+        });
+        return;
+      }
+
+      // Mark attendance
+      const { error } = await supabase
+        .from('attendance')
+        .insert({
+          student_id: profile.id,
+          course_id: session.course_id,
+          session_id: session.id,
+          class_date: session.session_date,
+          status: 'present',
+          marked_at: new Date().toISOString()
+        });
+
+      if (error) throw error;
+
+      toast({
+        title: 'Success',
+        description: 'Attendance marked successfully!',
+      });
+
+    } catch (error) {
+      console.error('Error marking attendance:', error);
+      toast({
+        title: 'Error',
+        description: 'Failed to mark attendance',
+        variant: 'destructive'
+      });
+    }
   };
 
   if (loading) {
@@ -120,173 +234,85 @@ const QRAttendanceSystem = () => {
           <h1 className="text-3xl font-bold">QR Attendance System</h1>
           <p className="text-muted-foreground">
             {profile?.user_type === 'faculty' 
-              ? 'Generate QR codes for your classes and track attendance' 
+              ? 'Manage attendance sessions and generate QR codes' 
               : 'Scan QR codes to mark your attendance'
             }
           </p>
         </div>
       </div>
 
-      {/* Statistics Cards */}
-      <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
-        <Card>
-          <CardContent className="p-4">
-            <div className="flex items-center space-x-2">
-              <Calendar className="h-5 w-5 text-primary" />
-              <div>
-                <p className="text-sm text-muted-foreground">Total Sessions</p>
-                <p className="text-2xl font-bold">{sessions.length}</p>
-              </div>
-            </div>
-          </CardContent>
-        </Card>
-        
-        <Card>
-          <CardContent className="p-4">
-            <div className="flex items-center space-x-2">
-              <Clock className="h-5 w-5 text-green-500" />
-              <div>
-                <p className="text-sm text-muted-foreground">Active Sessions</p>
-                <p className="text-2xl font-bold">{activeSessions.length}</p>
-              </div>
-            </div>
-          </CardContent>
-        </Card>
-        
-        <Card>
-          <CardContent className="p-4">
-            <div className="flex items-center space-x-2">
-              <Users className="h-5 w-5 text-blue-500" />
-              <div>
-                <p className="text-sm text-muted-foreground">Today's Classes</p>
-                <p className="text-2xl font-bold">
-                  {sessions.filter(s => 
-                    new Date(s.session_date).toDateString() === new Date().toDateString()
-                  ).length}
-                </p>
-              </div>
-            </div>
-          </CardContent>
-        </Card>
-        
-        <Card>
-          <CardContent className="p-4">
-            <div className="flex items-center space-x-2">
-              <QrCode className="h-5 w-5 text-purple-500" />
-              <div>
-                <p className="text-sm text-muted-foreground">This Week</p>
-                <p className="text-2xl font-bold">
-                  {sessions.filter(s => {
-                    const sessionDate = new Date(s.session_date);
-                    const weekAgo = new Date();
-                    weekAgo.setDate(weekAgo.getDate() - 7);
-                    return sessionDate >= weekAgo;
-                  }).length}
-                </p>
-              </div>
-            </div>
-          </CardContent>
-        </Card>
-      </div>
-
-      {/* Main Content */}
-      <Tabs value={activeTab} onValueChange={setActiveTab}>
-        <TabsList className="grid w-full grid-cols-3">
-          <TabsTrigger value="scanner">
-            <Scan className="h-4 w-4 mr-2" />
-            Scan QR
-          </TabsTrigger>
+      <Tabs defaultValue="sessions" className="space-y-4">
+        <TabsList>
+          <TabsTrigger value="sessions">Sessions</TabsTrigger>
           {profile?.user_type === 'faculty' && (
-            <TabsTrigger value="generate">
-              <QrCode className="h-4 w-4 mr-2" />
-              Generate QR
-            </TabsTrigger>
+            <TabsTrigger value="generate">Generate QR</TabsTrigger>
           )}
-          <TabsTrigger value="analytics">
-            <Users className="h-4 w-4 mr-2" />
-            Analytics
-          </TabsTrigger>
+          {profile?.user_type === 'student' && (
+            <TabsTrigger value="scan">Scan QR</TabsTrigger>
+          )}
         </TabsList>
 
-        <TabsContent value="scanner" className="space-y-4">
-          <Card>
-            <CardHeader>
-              <CardTitle>Mark Attendance</CardTitle>
-            </CardHeader>
-            <CardContent>
-              <QRCodeScanner
-                onSuccess={handleAttendanceMarked}
-                activeSessions={activeSessions}
-              />
-            </CardContent>
-          </Card>
-
-          {/* Active Sessions List */}
-          <Card>
-            <CardHeader>
-              <CardTitle>Active Sessions</CardTitle>
-            </CardHeader>
-            <CardContent>
-              {activeSessions.length === 0 ? (
-                <div className="text-center py-8">
-                  <Clock className="h-16 w-16 mx-auto mb-4 text-muted-foreground" />
-                  <p className="text-muted-foreground">No active sessions at the moment</p>
-                </div>
-              ) : (
-                <div className="space-y-4">
-                  {activeSessions.map(session => (
-                    <div key={session.id} className="flex items-center justify-between p-4 border rounded-lg">
-                      <div className="flex-1">
-                        <div className="flex items-center space-x-2">
-                          <h3 className="font-semibold">{session.course_name}</h3>
-                          <Badge variant="outline" className="text-green-600">
-                            Active
-                          </Badge>
+        <TabsContent value="sessions" className="space-y-4">
+          <div className="grid gap-4">
+            {sessions.map((session) => (
+              <Card key={session.id} className="hover:shadow-md transition-shadow">
+                <CardContent className="p-4">
+                  <div className="flex justify-between items-start">
+                    <div className="space-y-2">
+                      <h3 className="font-semibold text-lg">{session.course_name}</h3>
+                      <p className="text-sm text-muted-foreground">{session.topic}</p>
+                      <div className="flex items-center space-x-4 text-sm text-muted-foreground">
+                        <div className="flex items-center space-x-1">
+                          <Calendar className="h-4 w-4" />
+                          <span>{new Date(session.session_date).toLocaleDateString()}</span>
                         </div>
-                        <p className="text-sm text-muted-foreground">
-                          {session.instructor_name} • {session.start_time} - {session.end_time}
-                        </p>
-                        <div className="flex items-center space-x-4 text-sm text-muted-foreground mt-1">
-                          <span className="flex items-center space-x-1">
+                        <div className="flex items-center space-x-1">
+                          <Clock className="h-4 w-4" />
+                          <span>{session.start_time} - {session.end_time}</span>
+                        </div>
+                        {session.room_location && (
+                          <div className="flex items-center space-x-1">
                             <MapPin className="h-4 w-4" />
-                            <span>{session.location}</span>
-                          </span>
-                          <span className="flex items-center space-x-1">
-                            <Calendar className="h-4 w-4" />
-                            <span>{new Date(session.session_date).toLocaleDateString()}</span>
-                          </span>
-                        </div>
+                            <span>{session.room_location}</span>
+                          </div>
+                        )}
                       </div>
                     </div>
-                  ))}
-                </div>
-              )}
-            </CardContent>
-          </Card>
+                    <div className="flex items-center space-x-2">
+                      <Badge variant={session.is_active ? "default" : "secondary"}>
+                        {session.is_active ? "Active" : "Inactive"}
+                      </Badge>
+                      {profile?.user_type === 'faculty' && (
+                        <Button
+                          size="sm"
+                          onClick={() => setSelectedSession(session)}
+                          variant="outline"
+                        >
+                          View QR
+                        </Button>
+                      )}
+                    </div>
+                  </div>
+                </CardContent>
+              </Card>
+            ))}
+          </div>
         </TabsContent>
 
         {profile?.user_type === 'faculty' && (
           <TabsContent value="generate" className="space-y-4">
-            <Card>
-              <CardHeader>
-                <CardTitle>Create Attendance Session</CardTitle>
-              </CardHeader>
-              <CardContent>
-                <QRCodeGenerator
-                  onSessionCreated={handleSessionCreated}
-                  instructorId={profile.id}
-                />
-              </CardContent>
-            </Card>
+            <QRCodeGenerator 
+              onSessionCreated={handleCreateSession}
+              selectedSession={selectedSession}
+            />
           </TabsContent>
         )}
 
-        <TabsContent value="analytics" className="space-y-4">
-          <AttendanceAnalytics 
-            sessions={sessions}
-            userType={profile?.user_type || 'student'}
-          />
-        </TabsContent>
+        {profile?.user_type === 'student' && (
+          <TabsContent value="scan" className="space-y-4">
+            <QRCodeScanner onScanSuccess={handleScanSuccess} />
+          </TabsContent>
+        )}
       </Tabs>
     </div>
   );

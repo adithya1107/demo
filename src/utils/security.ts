@@ -17,6 +17,24 @@ export const sanitizeInput = (input: string): string => {
   return sanitized;
 };
 
+export const sanitizeCSS = (css: string): string => {
+  if (!css) return '';
+  
+  // Remove potentially dangerous CSS
+  let sanitized = css
+    .replace(/javascript:/gi, '')
+    .replace(/expression\(/gi, '')
+    .replace(/url\(/gi, '')
+    .replace(/@import/gi, '')
+    .replace(/behaviour:/gi, '')
+    .replace(/-moz-binding/gi, '');
+  
+  // Only allow safe CSS properties and values
+  const safeCSSRegex = /^[a-zA-Z0-9#\-_.,\s%():]*$/;
+  
+  return safeCSSRegex.test(sanitized) ? sanitized : '';
+};
+
 export const validateEmail = (email: string): boolean => {
   const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
   return emailRegex.test(email);

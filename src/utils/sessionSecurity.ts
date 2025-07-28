@@ -10,7 +10,7 @@ export interface SessionInfo {
   isValid: boolean;
 }
 
-export const validateSessionIntegrity = async (sessionId: string): Promise<boolean> => {
+export const validateSessionIntegrity = async (sessionId?: string): Promise<boolean> => {
   try {
     const { data: session } = await supabase.auth.getSession();
     if (!session?.session) {
@@ -105,6 +105,25 @@ export class SessionManager {
   invalidateSession(sessionId: string): void {
     this.sessions.delete(sessionId);
   }
+
+  getAllSessions(): Map<string, { expiresAt: number; userId: string }> {
+    return new Map(this.sessions);
+  }
+
+  cleanup(): void {
+    const now = Date.now();
+    for (const [sessionId, session] of this.sessions) {
+      if (now > session.expiresAt) {
+        this.sessions.delete(sessionId);
+      }
+    }
+  }
 }
 
+// Export singleton instance
 export const sessionManager = new SessionManager();
+
+// Cleanup expired sessions every 5 minutes
+setInterval(() => {
+  sessionManager.cleanup();
+}, 5 * 60 * 1000);
