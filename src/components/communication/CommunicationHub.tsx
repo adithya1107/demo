@@ -95,11 +95,11 @@ const CommunicationHub: React.FC = () => {
         .order('created_at', { ascending: false });
 
       if (error) throw error;
-      setChannels((data as CommunicationChannel[]) || []);
+      setChannels((data as unknown as CommunicationChannel[]) || []);
       
       // Set first channel as selected if available
       if (data && data.length > 0) {
-        setSelectedChannel(data[0] as CommunicationChannel);
+        setSelectedChannel(data[0] as unknown as CommunicationChannel);
       }
     } catch (error) {
       console.error('Error fetching channels:', error);
@@ -130,7 +130,7 @@ const CommunicationHub: React.FC = () => {
         .order('created_at', { ascending: true });
 
       if (error) throw error;
-      setMessages((data as Message[]) || []);
+      setMessages((data as unknown as Message[]) || []);
     } catch (error) {
       console.error('Error fetching messages:', error);
     }
@@ -151,7 +151,7 @@ const CommunicationHub: React.FC = () => {
         .eq('channel_id', channelId);
 
       if (error) throw error;
-      setMembers((data as ChannelMember[]) || []);
+      setMembers((data as unknown as ChannelMember[]) || []);
     } catch (error) {
       console.error('Error fetching channel members:', error);
     }
