@@ -1,4 +1,3 @@
-
 import React from 'react';
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from '@/components/ui/dialog';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
@@ -37,6 +36,13 @@ const CourseDetailsDialog: React.FC<CourseDetailsDialogProps> = ({
 
   const downloadCertificate = (certificateUrl: string) => {
     window.open(certificateUrl, '_blank');
+  };
+
+  // Handler that matches the expected signature for AssignmentSubmissionForm
+  const handleAssignmentSubmission = async (text: string, fileUrl?: string, assignmentId?: string) => {
+    if (assignmentId) {
+      await onSubmitAssignment(assignmentId, text, fileUrl);
+    }
   };
 
   if (!course) return null;
@@ -130,7 +136,9 @@ const CourseDetailsDialog: React.FC<CourseDetailsDialogProps> = ({
                         ) : !isOverdue && (
                           <AssignmentSubmissionForm 
                             assignment={assignment}
-                            onSubmit={onSubmitAssignment}
+                            onSubmit={(text: string, fileUrl?: string) => 
+                              handleAssignmentSubmission(text, fileUrl, assignment.id)
+                            }
                           />
                         )}
                       </CardContent>
