@@ -1,4 +1,3 @@
-
 import React, { useState, useEffect } from 'react';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
@@ -88,18 +87,19 @@ const CommunicationHub: React.FC = () => {
 
   const fetchChannels = async () => {
     try {
+      // Use .from() with type assertion for better type safety
       const { data, error } = await supabase
-        .from('communication_channels')
+        .from('communication_channels' as any)
         .select('*')
         .eq('college_id', profile?.college_id)
         .order('created_at', { ascending: false });
 
       if (error) throw error;
-      setChannels(data || []);
+      setChannels((data as CommunicationChannel[]) || []);
       
       // Set first channel as selected if available
       if (data && data.length > 0) {
-        setSelectedChannel(data[0]);
+        setSelectedChannel(data[0] as CommunicationChannel);
       }
     } catch (error) {
       console.error('Error fetching channels:', error);
@@ -116,7 +116,7 @@ const CommunicationHub: React.FC = () => {
   const fetchMessages = async (channelId: string) => {
     try {
       const { data, error } = await supabase
-        .from('messages')
+        .from('messages' as any)
         .select(`
           *,
           sender:user_profiles!messages_sender_id_fkey (
@@ -130,7 +130,7 @@ const CommunicationHub: React.FC = () => {
         .order('created_at', { ascending: true });
 
       if (error) throw error;
-      setMessages(data || []);
+      setMessages((data as Message[]) || []);
     } catch (error) {
       console.error('Error fetching messages:', error);
     }
@@ -139,7 +139,7 @@ const CommunicationHub: React.FC = () => {
   const fetchChannelMembers = async (channelId: string) => {
     try {
       const { data, error } = await supabase
-        .from('channel_members')
+        .from('channel_members' as any)
         .select(`
           *,
           user:user_profiles!channel_members_user_id_fkey (
@@ -151,7 +151,7 @@ const CommunicationHub: React.FC = () => {
         .eq('channel_id', channelId);
 
       if (error) throw error;
-      setMembers(data || []);
+      setMembers((data as ChannelMember[]) || []);
     } catch (error) {
       console.error('Error fetching channel members:', error);
     }
@@ -162,7 +162,7 @@ const CommunicationHub: React.FC = () => {
 
     try {
       const { error } = await supabase
-        .from('messages')
+        .from('messages' as any)
         .insert({
           channel_id: selectedChannel.id,
           sender_id: profile?.id,
@@ -187,7 +187,7 @@ const CommunicationHub: React.FC = () => {
   const joinChannel = async (channelId: string) => {
     try {
       const { error } = await supabase
-        .from('channel_members')
+        .from('channel_members' as any)
         .insert({
           channel_id: channelId,
           user_id: profile?.id,
@@ -215,7 +215,7 @@ const CommunicationHub: React.FC = () => {
   const addReaction = async (messageId: string, reactionType: string) => {
     try {
       const { error } = await supabase
-        .from('message_reactions')
+        .from('message_reactions' as any)
         .insert({
           message_id: messageId,
           user_id: profile?.id,
