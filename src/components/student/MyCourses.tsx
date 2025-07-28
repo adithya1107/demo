@@ -89,7 +89,7 @@ interface MyCoursesProps {
   };
 }
 
-// Props interface for CourseDetailsDialog
+// Define the correct props interface for CourseDetailsDialog
 interface CourseDetailsDialogProps {
   course: Course | null;
   isOpen: boolean;
@@ -277,15 +277,17 @@ const MyCourses: React.FC<MyCoursesProps> = ({ studentData }) => {
 
       {selectedCourse && (
         <CourseDetailsDialog
-          course={selectedCourse}
-          isOpen={!!selectedCourse}
-          onClose={() => setSelectedCourse(null)}
-          lectureMaterials={lectureMaterials}
-          assignments={assignments}
-          submissions={submissions}
-          grades={grades}
-          certificates={certificates}
-          onSubmitAssignment={handleSubmitAssignment}
+          {...({
+            course: selectedCourse,
+            isOpen: !!selectedCourse,
+            onClose: () => setSelectedCourse(null),
+            lectureMaterials,
+            assignments,
+            submissions,
+            grades,
+            certificates,
+            onSubmitAssignment: handleSubmitAssignment,
+          } as CourseDetailsDialogProps)}
         />
       )}
     </div>
