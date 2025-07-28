@@ -60,22 +60,33 @@ interface Room {
   updated_at: string;
 }
 
+// Updated Course interface to match actual database schema
 interface Course {
   id: string;
   course_name: string;
   course_code: string;
   credits: number;
-  department: string;
-  semester: number;
+  description: string;
+  instructor_id: string;
+  academic_year: string;
+  semester: string;
+  max_students: number;
+  is_active: boolean;
   college_id: string;
+  created_at: string;
+  updated_at: string;
 }
 
+// Updated Instructor interface to match actual database schema
 interface Instructor {
   id: string;
   first_name: string;
   last_name: string;
   email: string;
-  department: string;
+  user_type: string;
+  college_id: string;
+  created_at: string;
+  updated_at: string;
 }
 
 /* ─────────────────────────
@@ -148,7 +159,7 @@ const TimetableManagement: React.FC = () => {
     try {
       const { data, error } = await supabase
         .from('user_profiles')
-        .select('id, first_name, last_name, email, department')
+        .select('id, first_name, last_name, email, user_type, college_id, created_at, updated_at')
         .eq('college_id', profile?.college_id)
         .eq('user_type', 'faculty');
 
@@ -189,6 +200,18 @@ const TimetableManagement: React.FC = () => {
           created_at: new Date().toISOString(),
           updated_at: new Date().toISOString(),
         },
+        {
+          id: '3',
+          room_number: 'T301',
+          building: 'Tutorial Block',
+          floor: 3,
+          capacity: 25,
+          room_type: 'tutorial',
+          is_available: true,
+          college_id: profile?.college_id || '',
+          created_at: new Date().toISOString(),
+          updated_at: new Date().toISOString(),
+        },
       ];
       
       setRooms(mockRooms);
@@ -202,18 +225,23 @@ const TimetableManagement: React.FC = () => {
     try {
       // Since timetable_slots table doesn't exist, create mock data
       // In a real implementation, you'd query the actual table
+      if (courses.length === 0 || instructors.length === 0 || rooms.length === 0) {
+        setTimetableSlots([]);
+        return;
+      }
+
       const mockSlots: TimetableSlot[] = courses.map((course, index) => ({
         id: `slot-${index}`,
         course_id: course.id,
-        instructor_id: instructors[index % instructors.length]?.id || '',
+        instructor_id: course.instructor_id || instructors[index % instructors.length]?.id || '',
         room_id: rooms[index % rooms.length]?.id || '1',
         day_of_week: (index % 5) + 1, // Monday to Friday
         start_time: `${9 + (index % 8)}:00:00`,
         end_time: `${10 + (index % 8)}:00:00`,
         slot_type: index % 3 === 0 ? 'lecture' : index % 3 === 1 ? 'lab' : 'tutorial',
-        academic_year: '2024-25',
-        semester: 'Fall',
-        is_active: true,
+        academic_year: course.academic_year,
+        semester: course.semester,
+        is_active: course.is_active,
       }));
 
       // Enrich with related data
@@ -230,6 +258,13 @@ const TimetableManagement: React.FC = () => {
       setTimetableSlots([]);
     }
   };
+
+  // Re-fetch timetable slots when dependencies change
+  useEffect(() => {
+    if (courses.length > 0 && instructors.length > 0 && rooms.length > 0) {
+      fetchTimetableSlots();
+    }
+  }, [courses, instructors, rooms]);
 
   /* ─────────────
      UI helpers
@@ -294,6 +329,54 @@ const TimetableManagement: React.FC = () => {
           {profile?.user_type === 'student' ? 'Student View' : 
            profile?.user_type === 'faculty' ? 'Faculty View' : 'Admin View'}
         </Badge>
+      </div>
+
+      {/* Summary Stats */}
+      <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
+        <Card>
+          <CardContent className="p-4">
+            <div className="flex items-center space-x-2">
+              <BookOpen className="h-5 w-5 text-blue-600" />
+              <div>
+                <p className="text-sm text-muted-foreground">Total Courses</p>
+                <p className="text-xl font-bold">{courses.length}</p>
+              </div>
+            </div>
+          </CardContent>
+        </Card>
+        <Card>
+          <CardContent className="p-4">
+            <div className="flex items-center space-x-2">
+              <User className="h-5 w-5 text-green-600" />
+              <div>
+                <p className="text-sm text-muted-foreground">Instructors</p>
+                <p className="text-xl font-bold">{instructors.length}</p>
+              </div>
+            </div>
+          </CardContent>
+        </Card>
+        <Card>
+          <CardContent className="p-4">
+            <div className="flex items-center space-x-2">
+              <MapPin className="h-5 w-5 text-purple-600" />
+              <div>
+                <p className="text-sm text-muted-foreground">Rooms</p>
+                <p className="text-xl font-bold">{rooms.length}</p>
+              </div>
+            </div>
+          </CardContent>
+        </Card>
+        <Card>
+          <CardContent className="p-4">
+            <div className="flex items-center space-x-2">
+              <Clock className="h-5 w-5 text-orange-600" />
+              <div>
+                <p className="text-sm text-muted-foreground">Total Slots</p>
+                <p className="text-xl font-bold">{timetableSlots.length}</p>
+              </div>
+            </div>
+          </CardContent>
+        </Card>
       </div>
 
       {/* Tabs */}
