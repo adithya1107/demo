@@ -95,15 +95,23 @@ interface RawInstructor {
   last_name: string;
 }
 
+interface Enrollment {
+  course_id: string;
+}
+
 /* ─────────────────────────
    Helper: type-safe RPC wrap
    ───────────────────────── */
-const callRpc = async <T,>(
+const callRpc = async <T>(
   fnName: string,
   params?: Record<string, unknown>,
-) => {
-  // “as any” here avoids the union-of-known-functions constraint.
-  return (supabase.rpc as any)<T>(fnName, params ?? {});
+): Promise<{ data: T | null; error: any }> => {
+  try {
+    const { data, error } = await (supabase.rpc as any)(fnName, params ?? {});
+    return { data: data as T, error };
+  } catch (error) {
+    return { data: null, error };
+  }
 };
 
 /* ─────────────────────────
@@ -145,12 +153,12 @@ const TimetableManagement: React.FC = () => {
       /* Fallback if RPC missing */
       if (slotsError || !slotsData) {
         const { data: fallbackData, error: fallbackError } = await supabase
-          .from<RawTimetableSlot>('timetable_slots')
+          .from('timetable_slots')
           .select('*')
           .eq('is_active', true);
 
         if (fallbackError) throw fallbackError;
-        await processRawSlots(fallbackData ?? []);
+        await processRawSlots((fallbackData as RawTimetableSlot[]) ?? []);
         return;
       }
 
@@ -177,11 +185,11 @@ const TimetableManagement: React.FC = () => {
     let filteredSlots = rawSlots;
     if (profile?.user_type === 'student') {
       const { data: enrollments } = await supabase
-        .from<{ course_id: string }>('enrollments')
+        .from('enrollments')
         .select('course_id')
         .eq('student_id', profile.id);
 
-      const courseIds = (enrollments ?? []).map((e) => e.course_id);
+      const courseIds = ((enrollments as Enrollment[]) ?? []).map((e) => e.course_id);
       filteredSlots = rawSlots.filter((s) => courseIds.includes(s.course_id));
     } else if (profile?.user_type === 'faculty') {
       filteredSlots = rawSlots.filter((s) => s.instructor_id === profile.id);
@@ -193,36 +201,35 @@ const TimetableManagement: React.FC = () => {
     const instructorIds = [...new Set(filteredSlots.map((s) => s.instructor_id))];
 
     /* Parallel lookups */
-    const [{ data: coursesData }, roomsResp, { data: instructorsData }] =
-      await Promise.all([
-        supabase
-          .from<RawCourse>('courses')
-          .select('id, course_name, course_code')
-          .in('id', courseIds),
+    const [coursesResp, roomsResp, instructorsResp] = await Promise.all([
+      supabase
+        .from('courses')
+        .select('id, course_name, course_code')
+        .in('id', courseIds),
 
-        (async () => {
-          const { data: roomsRpcData, error: roomsRpcError } =
-            await callRpc<RawRoom[]>('get_rooms_by_ids', { room_ids: roomIds });
-          if (roomsRpcError || !roomsRpcData) {
-            const { data: roomsFallback } = await supabase
-              .from<RawRoom>('rooms')
-              .select('id, room_number, building, floor')
-              .in('id', roomIds);
-            return { data: roomsFallback };
-          }
-          return { data: roomsRpcData };
-        })(),
+      (async () => {
+        const { data: roomsRpcData, error: roomsRpcError } =
+          await callRpc<RawRoom[]>('get_rooms_by_ids', { room_ids: roomIds });
+        if (roomsRpcError || !roomsRpcData) {
+          const { data: roomsFallback } = await supabase
+            .from('rooms')
+            .select('id, room_number, building, floor')
+            .in('id', roomIds);
+          return { data: roomsFallback as RawRoom[] };
+        }
+        return { data: roomsRpcData };
+      })(),
 
-        supabase
-          .from<RawInstructor>('user_profiles')
-          .select('id, first_name, last_name')
-          .in('id', instructorIds),
-      ]);
+      supabase
+        .from('user_profiles')
+        .select('id, first_name, last_name')
+        .in('id', instructorIds),
+    ]);
 
     /* Build lookup maps */
-    const coursesMap = new Map((coursesData ?? []).map((c) => [c.id, c]));
-    const roomsMap = new Map((roomsResp.data ?? []).map((r) => [r.id, r]));
-    const instructorsMap = new Map((instructorsData ?? []).map((i) => [i.id, i]));
+    const coursesMap = new Map(((coursesResp.data as RawCourse[]) ?? []).map((c) => [c.id, c]));
+    const roomsMap = new Map(((roomsResp.data as RawRoom[]) ?? []).map((r) => [r.id, r]));
+    const instructorsMap = new Map(((instructorsResp.data as RawInstructor[]) ?? []).map((i) => [i.id, i]));
 
     /* Final transformation */
     const transformed: TimetableSlot[] = filteredSlots.map((slot) => ({
@@ -239,7 +246,7 @@ const TimetableManagement: React.FC = () => {
     setTimetableSlots(transformed);
   };
 
-  /* Rooms (for “Room Schedule” tab) */
+  /* Rooms (for "Room Schedule" tab) */
   const fetchRooms = async () => {
     try {
       const { data: rpcRooms, error: rpcError } =
@@ -247,14 +254,14 @@ const TimetableManagement: React.FC = () => {
 
       if (rpcError || !rpcRooms) {
         const { data: fallbackRooms, error: fallbackError } = await supabase
-          .from<Room>('rooms')
+          .from('rooms')
           .select('*')
-          .eq('college_id', profile?.college_id)
+          .eq('college_id', profile?.college_id || '')
           .eq('is_available', true)
           .order('building', { ascending: true });
 
         if (fallbackError) throw fallbackError;
-        setRooms(fallbackRooms ?? []);
+        setRooms((fallbackRooms as Room[]) ?? []);
       } else {
         setRooms(rpcRooms);
       }
