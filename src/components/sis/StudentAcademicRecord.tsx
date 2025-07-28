@@ -43,15 +43,25 @@ const StudentAcademicRecord: React.FC = () => {
 
   const fetchAcademicRecords = async () => {
     try {
-      // Changed from 'student_academic_records' to 'academic_records' or another valid table name
-      // You may need to adjust this based on your actual table name
-      const response = await apiGateway.select('academic_records', {
+      // Using enrollments table to derive academic records since student_academic_records is not available
+      const response = await apiGateway.select('enrollments', {
+        select: `
+          id,
+          academic_year,
+          semester,
+          grade,
+          courses (
+            credits
+          )
+        `,
         filters: { student_id: profile?.id },
         order: { column: 'academic_year', ascending: false }
       });
 
       if (response.success && response.data) {
-        setAcademicRecords(response.data);
+        // Process enrollments to create academic records summary
+        const processedRecords = processEnrollmentsToAcademicRecords(response.data);
+        setAcademicRecords(processedRecords);
       }
     } catch (error) {
       console.error('Error fetching academic records:', error);
@@ -61,6 +71,74 @@ const StudentAcademicRecord: React.FC = () => {
         variant: 'destructive'
       });
     }
+  };
+
+  const processEnrollmentsToAcademicRecords = (enrollments: any[]): AcademicRecord[] => {
+    const recordsMap = new Map();
+
+    enrollments.forEach(enrollment => {
+      const key = `${enrollment.academic_year}-${enrollment.semester}`;
+      
+      if (!recordsMap.has(key)) {
+        recordsMap.set(key, {
+          id: key,
+          academic_year: enrollment.academic_year,
+          semester: enrollment.semester,
+          enrollments: [],
+          total_credits: 0,
+          completed_credits: 0
+        });
+      }
+
+      recordsMap.get(key).enrollments.push(enrollment);
+      if (enrollment.courses?.credits) {
+        recordsMap.get(key).total_credits += enrollment.courses.credits;
+        if (enrollment.grade && enrollment.grade !== 'F') {
+          recordsMap.get(key).completed_credits += enrollment.courses.credits;
+        }
+      }
+    });
+
+    return Array.from(recordsMap.values()).map(record => ({
+      id: record.id,
+      academic_year: record.academic_year,
+      semester: record.semester,
+      cgpa: calculateCGPA(record.enrollments),
+      sgpa: calculateSGPA(record.enrollments),
+      total_credits: record.total_credits,
+      completed_credits: record.completed_credits,
+      academic_status: 'Active'
+    }));
+  };
+
+  const calculateCGPA = (enrollments: any[]): number => {
+    const gradedEnrollments = enrollments.filter(e => e.grade && e.grade !== 'F');
+    if (gradedEnrollments.length === 0) return 0;
+
+    const totalPoints = gradedEnrollments.reduce((sum, enrollment) => {
+      return sum + (getGradePoints(enrollment.grade) * (enrollment.courses?.credits || 0));
+    }, 0);
+
+    const totalCredits = gradedEnrollments.reduce((sum, enrollment) => {
+      return sum + (enrollment.courses?.credits || 0);
+    }, 0);
+
+    return totalCredits > 0 ? totalPoints / totalCredits : 0;
+  };
+
+  const calculateSGPA = (enrollments: any[]): number => {
+    // For simplicity, using the same calculation as CGPA for individual semester
+    return calculateCGPA(enrollments);
+  };
+
+  const getGradePoints = (grade: string): number => {
+    const gradePointsMap: { [key: string]: number } = {
+      'A+': 4.0, 'A': 4.0, 'A-': 3.7,
+      'B+': 3.3, 'B': 3.0, 'B-': 2.7,
+      'C+': 2.3, 'C': 2.0, 'C-': 1.7,
+      'D': 1.0, 'F': 0.0
+    };
+    return gradePointsMap[grade] || 0;
   };
 
   const fetchCourseGrades = async () => {
@@ -80,7 +158,7 @@ const StudentAcademicRecord: React.FC = () => {
 
       if (response.success && response.data) {
         const grades: CourseGrade[] = response.data
-          .filter(enrollment => enrollment.grade)
+          .filter(enrollment => enrollment.grade && enrollment.courses)
           .map(enrollment => ({
             course_name: enrollment.courses.course_name,
             course_code: enrollment.courses.course_code,
