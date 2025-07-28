@@ -22,7 +22,7 @@ interface MarketplaceItem {
   condition: 'new' | 'like_new' | 'good' | 'fair' | 'poor';
   category: string;
   images: string[];
-  is_available: boolean;
+  status: 'active' | 'sold' | 'reserved';
   created_at: string;
   seller_name?: string;
   seller_contact?: string;
@@ -70,15 +70,27 @@ const StudentMarketplace = () => {
           )
         `)
         .eq('college_id', profile?.college_id)
-        .eq('is_available', true)
+        .eq('status', 'active')
         .order('created_at', { ascending: false });
 
       if (error) throw error;
 
-      const formattedItems = data?.map(item => ({
-        ...item,
-        seller_name: `${item.user_profiles?.first_name || ''} ${item.user_profiles?.last_name || ''}`.trim(),
-        seller_contact: item.user_profiles?.email
+      const formattedItems: MarketplaceItem[] = data?.map(item => ({
+        id: item.id,
+        seller_id: item.seller_id,
+        college_id: item.college_id,
+        title: item.title || '',
+        description: item.description || '',
+        price: item.price || 0,
+        condition: item.condition as 'new' | 'like_new' | 'good' | 'fair' | 'poor',
+        category: item.category || '',
+        images: item.images || [],
+        status: item.status as 'active' | 'sold' | 'reserved',
+        created_at: item.created_at,
+        seller_name: item.user_profiles 
+          ? `${item.user_profiles.first_name || ''} ${item.user_profiles.last_name || ''}`.trim()
+          : 'Unknown',
+        seller_contact: item.user_profiles?.email || ''
       })) || [];
 
       setItems(formattedItems);
@@ -141,7 +153,7 @@ const StudentMarketplace = () => {
       // Mark item as sold
       const { error: updateError } = await supabase
         .from('marketplace_items')
-        .update({ is_available: false })
+        .update({ status: 'sold' })
         .eq('id', item.id);
 
       if (updateError) throw updateError;
