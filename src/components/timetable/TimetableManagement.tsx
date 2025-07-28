@@ -102,17 +102,24 @@ interface Enrollment {
 /* ─────────────────────────
    Helper: type-safe RPC wrap
    ───────────────────────── */
-const callRpc = async <T>(
-  fnName: string,
-  params?: Record<string, unknown>
-): Promise<{ data: T | null; error: any }> => {
-  try {
-    const { data, error } = await (supabase.rpc as any)(fnName, params ?? {});
-    return { data: data as T, error };
-  } catch (error) {
-    return { data: null, error };
-  }
-};
+// Around line 106-108, ensure proper syntax like this:
+const transformed: TimetableSlot[] = filteredSlots.map((slot) => ({
+  ...slot,
+  courses: coursesMap.get(slot.course_id) ?? { 
+    course_name: 'Unknown', 
+    course_code: 'N/A' 
+  },
+  rooms: roomsMap.get(slot.room_id) ?? {
+    room_number: 'Unknown', 
+    building: 'Unknown', 
+    floor: 0,
+  },
+  instructor: instructorsMap.get(slot.instructor_id) ?? {
+    first_name: 'Unknown', 
+    last_name: 'Instructor',
+  },
+}));
+
 
 /* ─────────────────────────
    Main component
