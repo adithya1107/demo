@@ -8,10 +8,13 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@
 import { Search, Plus, ShoppingCart, User, Calendar } from 'lucide-react';
 import { useUserProfile } from '@/hooks/useUserProfile';
 import { supabase } from '@/integrations/supabase/client';
-import { toast } from '@/components/ui/use-toast';
+import { toast } from '@/hooks/use-toast';
 import ProductListingForm from './ProductListingForm';
 import ProductCard from './ProductCard';
 import PaymentModal from './PaymentModal';
+
+type MarketplaceItemCondition = 'new' | 'like_new' | 'good' | 'fair' | 'poor';
+type MarketplaceItemStatus = 'active' | 'sold' | 'reserved';
 
 interface MarketplaceItem {
   id: string;
@@ -19,13 +22,13 @@ interface MarketplaceItem {
   description: string;
   price: number;
   category: string;
-  condition: 'new' | 'like_new' | 'good' | 'fair' | 'poor';
+  condition: MarketplaceItemCondition;
   images: string[];
   seller_id: string;
   seller_name: string;
   seller_rating: number;
   college_id: string;
-  status: string;
+  status: MarketplaceItemStatus;
   created_at: string;
   updated_at: string;
 }
@@ -138,8 +141,7 @@ const StudentMarketplace = () => {
           buyer_id: profile?.id,
           seller_id: selectedItem.seller_id,
           amount: selectedItem.price,
-          status: 'completed',
-          college_id: profile.college_id
+          status: 'completed'
         });
 
       if (error) throw error;

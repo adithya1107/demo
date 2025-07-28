@@ -4,7 +4,7 @@ import { Input } from '@/components/ui/input';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { supabase } from '@/integrations/supabase/client';
-import { useToast } from '@/components/ui/use-toast';
+import { useToast } from '@/hooks/use-toast';
 import { sanitizeInput } from '@/utils/security';
 
 interface LoginCredentialsProps {
@@ -57,10 +57,10 @@ export const LoginCredentials: React.FC<LoginCredentialsProps> = ({
         throw new Error('College information not found');
       }
 
-      // Use direct query instead of RPC since the function might not exist
+      // Query user profile directly without password check (will be handled by auth)
       const { data: userProfile, error: loginError } = await supabase
         .from('user_profiles')
-        .select('id, user_type, first_name, last_name, email, password, college_id, is_active')
+        .select('id, user_type, first_name, last_name, email, college_id, is_active, user_code')
         .eq('user_code', sanitizedUserCode)
         .eq('college_id', collegeData.college_id)
         .eq('is_active', true)
@@ -68,7 +68,7 @@ export const LoginCredentials: React.FC<LoginCredentialsProps> = ({
 
       if (loginError) throw loginError;
 
-      if (userProfile && userProfile.password === password) {
+      if (userProfile) {
         // Create the email format that Supabase expects
         const email = `${sanitizedUserCode}@${collegeInfo.code.toLowerCase()}.edu`;
         
