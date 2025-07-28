@@ -1,9 +1,10 @@
+
 import React, { useState, useEffect } from 'react';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { Progress } from '@/components/ui/progress';
-import { supabase } from '@/integrations/supabase/client';
+import { apiGateway } from '@/utils/apiGateway';
 import { useUserProfile } from '@/hooks/useUserProfile';
 import { GraduationCap, BookOpen, Award, TrendingUp } from 'lucide-react';
 import { useToast } from '@/hooks/use-toast';
@@ -27,15 +28,6 @@ interface CourseGrade {
   marks: number;
 }
 
-interface EnrollmentData {
-  grade: string;
-  courses: {
-    course_name: string;
-    course_code: string;
-    credits: number;
-  };
-}
-
 const StudentAcademicRecord: React.FC = () => {
   const { profile } = useUserProfile();
   const [academicRecords, setAcademicRecords] = useState<AcademicRecord[]>([]);
@@ -52,43 +44,14 @@ const StudentAcademicRecord: React.FC = () => {
 
   const fetchAcademicRecords = async () => {
     try {
-      // Since student_academic_records table doesn't exist, 
-      // we'll create mock data or fetch from an alternative source
-      // You might need to create this table or use existing tables
-      
-      // For now, creating mock data based on enrollments
-      const { data: enrollments, error } = await supabase
-        .from('enrollments')
-        .select(`
-          grade,
-          courses (
-            credits
-          )
-        `)
-        .eq('student_id', profile?.id);
+      const response = await apiGateway.select('student_academic_records', {
+        filters: { student_id: profile?.id },
+        order: { column: 'academic_year', ascending: false }
+      });
 
-      if (error) throw error;
-
-      // Calculate academic record from enrollments
-      const currentYear = new Date().getFullYear();
-      const totalCredits = enrollments?.reduce((sum, enrollment) => 
-        sum + (enrollment.courses?.credits || 0), 0) || 0;
-      
-      const completedCredits = enrollments?.filter(e => e.grade && e.grade !== 'F')
-        .reduce((sum, enrollment) => sum + (enrollment.courses?.credits || 0), 0) || 0;
-
-      const mockRecord: AcademicRecord = {
-        id: '1',
-        academic_year: `${currentYear}-${currentYear + 1}`,
-        semester: 'Current Semester',
-        cgpa: 0, // You'll need to implement GPA calculation
-        sgpa: 0, // You'll need to implement GPA calculation
-        total_credits: totalCredits,
-        completed_credits: completedCredits,
-        academic_status: 'Active'
-      };
-
-      setAcademicRecords([mockRecord]);
+      if (response.success && response.data) {
+        setAcademicRecords(response.data);
+      }
     } catch (error) {
       console.error('Error fetching academic records:', error);
       toast({
@@ -101,30 +64,32 @@ const StudentAcademicRecord: React.FC = () => {
 
   const fetchCourseGrades = async () => {
     try {
-      const { data, error } = await supabase
-        .from('enrollments')
-        .select(`
+      const response = await apiGateway.select('enrollments', {
+        select: `
           grade,
           courses (
             course_name,
             course_code,
             credits
           )
-        `)
-        .eq('student_id', profile?.id)
-        .not('grade', 'is', null);
+        `,
+        filters: { student_id: profile?.id },
+        order: { column: 'created_at', ascending: false }
+      });
 
-      if (error) throw error;
-      
-      const grades: CourseGrade[] = (data as EnrollmentData[])?.map(enrollment => ({
-        course_name: enrollment.courses.course_name,
-        course_code: enrollment.courses.course_code,
-        credits: enrollment.courses.credits,
-        grade: enrollment.grade,
-        marks: calculateMarksFromGrade(enrollment.grade)
-      })) || [];
+      if (response.success && response.data) {
+        const grades: CourseGrade[] = response.data
+          .filter(enrollment => enrollment.grade)
+          .map(enrollment => ({
+            course_name: enrollment.courses.course_name,
+            course_code: enrollment.courses.course_code,
+            credits: enrollment.courses.credits,
+            grade: enrollment.grade,
+            marks: calculateMarksFromGrade(enrollment.grade)
+          }));
 
-      setCourseGrades(grades);
+        setCourseGrades(grades);
+      }
     } catch (error) {
       console.error('Error fetching course grades:', error);
     } finally {

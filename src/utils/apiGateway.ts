@@ -1,3 +1,4 @@
+
 import { supabase } from '@/integrations/supabase/client';
 import { dbSecurityValidator } from './databaseSecurity';
 import { auditLogger } from './auditLogger';
@@ -21,7 +22,7 @@ export interface APIConfig {
 // Type for valid table names
 type TableName = keyof Database['public']['Tables'];
 
-// Simplified query options to avoid deep type instantiation
+// Query options interface
 export interface QueryOptions {
   select?: string;
   filters?: Record<string, any>;
@@ -31,12 +32,6 @@ export interface QueryOptions {
   };
   limit?: number;
   offset?: number;
-}
-
-// Simplified Supabase response type
-interface SupabaseResponse<T> {
-  data: T | null;
-  error: { message: string } | null;
 }
 
 // Cache entry interface
@@ -112,8 +107,7 @@ export class APIGateway {
   }
 
   private buildSelectQuery(table: TableName, query: QueryOptions): any {
-    // Use type assertion to avoid deep type instantiation
-    let queryBuilder: any = supabase.from(table).select(query.select || '*');
+    let queryBuilder = supabase.from(table).select(query.select || '*');
 
     // Apply filters
     if (query.filters) {
@@ -169,19 +163,14 @@ export class APIGateway {
         return result;
       }
 
-      // Create new request with simplified type handling
+      // Create new request
       const requestPromise = this.executeWithRetry(async () => {
         const queryBuilder = this.buildSelectQuery(table, query);
-        const rawResult: any = await queryBuilder;
-        
-        // Pass the executed result to validator with explicit typing
-        const validatedResult = await dbSecurityValidator.validateAndExecuteQuery(
-          rawResult,
+        return await dbSecurityValidator.validateAndExecuteQuery(
+          queryBuilder,
           'select',
           `${table}_select`
         );
-
-        return validatedResult as SupabaseResponse<T[]>;
       });
 
       // Store in request queue
@@ -194,11 +183,11 @@ export class APIGateway {
 
       const duration = performance.now() - startTime;
 
-      if (result.error) {
-        await this.logAPICall('SELECT', table, duration, false, result.error.message);
+      if (!result) {
+        await this.logAPICall('SELECT', table, duration, false, 'No data returned');
         return {
           data: null,
-          error: result.error.message,
+          error: 'No data returned',
           success: false,
           timestamp: new Date().toISOString(),
         };
@@ -207,7 +196,7 @@ export class APIGateway {
       // Cache successful result
       if (useCache && this.config.enableCaching) {
         this.cache.set(cacheKey, {
-          data: result.data,
+          data: result,
           timestamp: Date.now(),
           ttl: this.config.cacheTimeout,
         });
@@ -216,7 +205,7 @@ export class APIGateway {
       await this.logAPICall('SELECT', table, duration, true);
 
       return {
-        data: result.data,
+        data: result,
         error: null,
         success: true,
         timestamp: new Date().toISOString(),
@@ -247,33 +236,26 @@ export class APIGateway {
       const sanitizedData = dbSecurityValidator.sanitizeUserInput(data);
       
       const result = await this.executeWithRetry(async () => {
-        let queryBuilder: any = supabase.from(table).insert(sanitizedData);
-        
-        let rawResult: any;
+        let queryBuilder = supabase.from(table).insert(sanitizedData);
         
         if (options.returning) {
-          rawResult = await queryBuilder.select(options.returning);
-        } else {
-          rawResult = await queryBuilder;
+          queryBuilder = queryBuilder.select(options.returning);
         }
         
-        // Pass the executed result to validator with explicit typing
-        const validatedResult = await dbSecurityValidator.validateAndExecuteQuery(
-          rawResult,
+        return await dbSecurityValidator.validateAndExecuteQuery(
+          queryBuilder,
           'insert',
           `${table}_insert`
         );
-        
-        return validatedResult as SupabaseResponse<T>;
       });
 
       const duration = performance.now() - startTime;
 
-      if (result.error) {
-        await this.logAPICall('INSERT', table, duration, false, result.error.message);
+      if (!result) {
+        await this.logAPICall('INSERT', table, duration, false, 'Insert failed');
         return {
           data: null,
-          error: result.error.message,
+          error: 'Insert failed',
           success: false,
           timestamp: new Date().toISOString(),
         };
@@ -285,7 +267,7 @@ export class APIGateway {
       await this.logAPICall('INSERT', table, duration, true);
 
       return {
-        data: result.data,
+        data: result,
         error: null,
         success: true,
         timestamp: new Date().toISOString(),
@@ -316,38 +298,31 @@ export class APIGateway {
       const sanitizedData = dbSecurityValidator.sanitizeUserInput(data);
       
       const result = await this.executeWithRetry(async () => {
-        let queryBuilder: any = supabase.from(table).update(sanitizedData);
+        let queryBuilder = supabase.from(table).update(sanitizedData);
 
-        // Apply filters with explicit typing
+        // Apply filters
         Object.entries(filters).forEach(([key, value]) => {
           queryBuilder = queryBuilder.eq(key, value);
         });
         
-        let rawResult: any;
-        
         if (options.returning) {
-          rawResult = await queryBuilder.select(options.returning);
-        } else {
-          rawResult = await queryBuilder;
+          queryBuilder = queryBuilder.select(options.returning);
         }
         
-        // Pass the executed result to validator with explicit typing
-        const validatedResult = await dbSecurityValidator.validateAndExecuteQuery(
-          rawResult,
+        return await dbSecurityValidator.validateAndExecuteQuery(
+          queryBuilder,
           'update',
           `${table}_update`
         );
-        
-        return validatedResult as SupabaseResponse<T>;
       });
 
       const duration = performance.now() - startTime;
 
-      if (result.error) {
-        await this.logAPICall('UPDATE', table, duration, false, result.error.message);
+      if (!result) {
+        await this.logAPICall('UPDATE', table, duration, false, 'Update failed');
         return {
           data: null,
-          error: result.error.message,
+          error: 'Update failed',
           success: false,
           timestamp: new Date().toISOString(),
         };
@@ -359,7 +334,7 @@ export class APIGateway {
       await this.logAPICall('UPDATE', table, duration, true);
 
       return {
-        data: result.data,
+        data: result,
         error: null,
         success: true,
         timestamp: new Date().toISOString(),
@@ -386,33 +361,27 @@ export class APIGateway {
 
     try {
       const result = await this.executeWithRetry(async () => {
-        let queryBuilder: any = supabase.from(table).delete();
+        let queryBuilder = supabase.from(table).delete();
 
-        // Apply filters with explicit typing
+        // Apply filters
         Object.entries(filters).forEach(([key, value]) => {
           queryBuilder = queryBuilder.eq(key, value);
         });
 
-        // Execute the query with explicit typing
-        const rawResult: any = await queryBuilder;
-        
-        // Pass the executed result to validator with explicit typing
-        const validatedResult = await dbSecurityValidator.validateAndExecuteQuery(
-          rawResult,
+        return await dbSecurityValidator.validateAndExecuteQuery(
+          queryBuilder,
           'delete',
           `${table}_delete`
         );
-        
-        return validatedResult as SupabaseResponse<T>;
       });
 
       const duration = performance.now() - startTime;
 
-      if (result.error) {
-        await this.logAPICall('DELETE', table, duration, false, result.error.message);
+      if (!result) {
+        await this.logAPICall('DELETE', table, duration, false, 'Delete failed');
         return {
           data: null,
-          error: result.error.message,
+          error: 'Delete failed',
           success: false,
           timestamp: new Date().toISOString(),
         };
@@ -424,7 +393,7 @@ export class APIGateway {
       await this.logAPICall('DELETE', table, duration, true);
 
       return {
-        data: result.data,
+        data: result,
         error: null,
         success: true,
         timestamp: new Date().toISOString(),

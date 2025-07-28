@@ -1,6 +1,7 @@
+
 import { useState, useEffect } from 'react';
-import { supabase } from '@/integrations/supabase/client';
 import { useAuth } from './useAuth';
+import { apiGateway } from '@/utils/apiGateway';
 
 export interface UserProfile {
   id: string;
@@ -8,7 +9,7 @@ export interface UserProfile {
   first_name: string;
   last_name: string;
   user_code: string;
-  user_type: 'super_admin' | 'faculty' | 'staff' | 'admin' | 'student' | 'parent' | 'alumni' | 'teacher';
+  user_type: 'super_admin' | 'faculty' | 'staff' | 'admin' | 'student' | 'parent' | 'alumni';
   college_id: string;
   is_active: boolean;
   created_at: string;
@@ -31,20 +32,17 @@ export const useUserProfile = () => {
       }
 
       try {
-        const { data, error } = await supabase
-          .from('user_profiles')
-          .select('*')
-          .eq('id', user.id)
-          .single();
+        const response = await apiGateway.select('user_profiles', {
+          filters: { id: user.id },
+          limit: 1
+        });
 
-        if (error) {
-          console.error('Error fetching profile:', error);
-          setError(error.message);
-          setProfile(null);
-        } else {
-          // Type assertion to ensure compatibility
-          setProfile(data as UserProfile);
+        if (response.success && response.data && response.data.length > 0) {
+          setProfile(response.data[0] as UserProfile);
           setError(null);
+        } else {
+          setError('Profile not found');
+          setProfile(null);
         }
       } catch (err) {
         console.error('Error in fetchProfile:', err);
@@ -64,20 +62,14 @@ export const useUserProfile = () => {
     if (!user || !profile) return { error: 'No user or profile found' };
 
     try {
-      const { data, error } = await supabase
-        .from('user_profiles')
-        .update(updates as any) // Type assertion for database compatibility
-        .eq('id', user.id)
-        .select()
-        .single();
+      const response = await apiGateway.update('user_profiles', updates, { id: user.id });
 
-      if (error) {
-        return { error: error.message };
+      if (response.success && response.data) {
+        setProfile(response.data as UserProfile);
+        return { data: response.data };
+      } else {
+        return { error: response.error || 'Failed to update profile' };
       }
-
-      // Type assertion to ensure compatibility
-      setProfile(data as UserProfile);
-      return { data };
     } catch (err) {
       return { error: 'Failed to update profile' };
     }

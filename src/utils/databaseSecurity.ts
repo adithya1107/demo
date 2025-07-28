@@ -30,7 +30,7 @@ export class DatabaseSecurityValidator {
   }
 
   public async validateAndExecuteQuery<T>(
-    queryBuilder: any,
+    queryPromise: Promise<any>,
     queryType: 'select' | 'insert' | 'update' | 'delete',
     context: string
   ): Promise<T | null> {
@@ -47,7 +47,6 @@ export class DatabaseSecurityValidator {
       }
 
       // Execute query with timeout
-      const queryPromise = queryBuilder;
       const timeoutPromise = new Promise((_, reject) => {
         setTimeout(() => reject(new Error('Query timeout')), this.config.maxQueryTimeout);
       });
@@ -110,7 +109,6 @@ export class DatabaseSecurityValidator {
         .replace(/\bSELECT\b/gi, '')
         .replace(/\bINSERT\b/gi, '')
         .replace(/\bUPDATE\b/gi, '')
-        .replace(/\bDELETE\b/gi, '')
         .replace(/\bDROP\b/gi, '')
         .replace(/\bEXEC\b/gi, '')
         .replace(/\bCREATE\b/gi, '')
