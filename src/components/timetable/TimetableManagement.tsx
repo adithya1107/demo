@@ -104,7 +104,7 @@ interface Enrollment {
    ───────────────────────── */
 const callRpc = async <T>(
   fnName: string,
-  params?: Record<string, unknown>,
+  params?: Record<string, unknown>
 ): Promise<{ data: T | null; error: any }> => {
   try {
     const { data, error } = await (supabase.rpc as any)(fnName, params ?? {});
@@ -141,8 +141,7 @@ const TimetableManagement: React.FC = () => {
       fetchTimetableSlots();
       fetchRooms();
     }
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [profile?.id]);
+  }, [profile?.id]); // Removed the eslint-disable comment
 
   /* Timetable slots (primary) */
   const fetchTimetableSlots = async () => {
@@ -236,10 +235,13 @@ const TimetableManagement: React.FC = () => {
       ...slot,
       courses: coursesMap.get(slot.course_id) ?? { course_name: 'Unknown', course_code: 'N/A' },
       rooms: roomsMap.get(slot.room_id) ?? {
-        room_number: 'Unknown', building: 'Unknown', floor: 0,
+        room_number: 'Unknown', 
+        building: 'Unknown', 
+        floor: 0,
       },
       instructor: instructorsMap.get(slot.instructor_id) ?? {
-        first_name: 'Unknown', last_name: 'Instructor',
+        first_name: 'Unknown', 
+        last_name: 'Instructor',
       },
     }));
 
@@ -299,7 +301,7 @@ const TimetableManagement: React.FC = () => {
 
   const getSlotsForTime = (day: number, time: string) =>
     timetableSlots.filter(
-      (s) => s.day_of_week === day && s.start_time === `${time}:00`,
+      (s) => s.day_of_week === day && s.start_time === `${time}:00`
     );
 
   const formatTime = (t: string) => {
