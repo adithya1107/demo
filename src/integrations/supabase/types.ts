@@ -1946,6 +1946,57 @@ export type Database = {
           },
         ]
       }
+      fee_transactions: {
+        Row: {
+          amount: number
+          college_id: string
+          created_at: string | null
+          currency: string | null
+          due_date: string | null
+          fee_type: string
+          id: string
+          metadata: Json | null
+          paid_at: string | null
+          payment_method: string | null
+          student_id: string
+          transaction_id: string | null
+          transaction_status: string | null
+          updated_at: string | null
+        }
+        Insert: {
+          amount: number
+          college_id: string
+          created_at?: string | null
+          currency?: string | null
+          due_date?: string | null
+          fee_type: string
+          id?: string
+          metadata?: Json | null
+          paid_at?: string | null
+          payment_method?: string | null
+          student_id: string
+          transaction_id?: string | null
+          transaction_status?: string | null
+          updated_at?: string | null
+        }
+        Update: {
+          amount?: number
+          college_id?: string
+          created_at?: string | null
+          currency?: string | null
+          due_date?: string | null
+          fee_type?: string
+          id?: string
+          metadata?: Json | null
+          paid_at?: string | null
+          payment_method?: string | null
+          student_id?: string
+          transaction_id?: string | null
+          transaction_status?: string | null
+          updated_at?: string | null
+        }
+        Relationships: []
+      }
       forum_posts: {
         Row: {
           author_id: string
@@ -1997,6 +2048,51 @@ export type Database = {
             referencedColumns: ["id"]
           },
         ]
+      }
+      grade_submissions: {
+        Row: {
+          assignment_id: string
+          course_id: string
+          created_at: string | null
+          feedback: string | null
+          grade_letter: string | null
+          grade_value: number | null
+          graded_at: string | null
+          graded_by: string | null
+          id: string
+          is_final: boolean | null
+          student_id: string
+          updated_at: string | null
+        }
+        Insert: {
+          assignment_id: string
+          course_id: string
+          created_at?: string | null
+          feedback?: string | null
+          grade_letter?: string | null
+          grade_value?: number | null
+          graded_at?: string | null
+          graded_by?: string | null
+          id?: string
+          is_final?: boolean | null
+          student_id: string
+          updated_at?: string | null
+        }
+        Update: {
+          assignment_id?: string
+          course_id?: string
+          created_at?: string | null
+          feedback?: string | null
+          grade_letter?: string | null
+          grade_value?: number | null
+          graded_at?: string | null
+          graded_by?: string | null
+          id?: string
+          is_final?: boolean | null
+          student_id?: string
+          updated_at?: string | null
+        }
+        Relationships: []
       }
       grades: {
         Row: {
@@ -2534,6 +2630,54 @@ export type Database = {
             referencedColumns: ["id"]
           },
         ]
+      }
+      notifications: {
+        Row: {
+          action_url: string | null
+          college_id: string
+          content: string
+          created_at: string | null
+          expires_at: string | null
+          id: string
+          is_read: boolean | null
+          metadata: Json | null
+          notification_type: string
+          priority: string | null
+          recipient_id: string
+          sender_id: string | null
+          title: string
+        }
+        Insert: {
+          action_url?: string | null
+          college_id: string
+          content: string
+          created_at?: string | null
+          expires_at?: string | null
+          id?: string
+          is_read?: boolean | null
+          metadata?: Json | null
+          notification_type?: string
+          priority?: string | null
+          recipient_id: string
+          sender_id?: string | null
+          title: string
+        }
+        Update: {
+          action_url?: string | null
+          college_id?: string
+          content?: string
+          created_at?: string | null
+          expires_at?: string | null
+          id?: string
+          is_read?: boolean | null
+          metadata?: Json | null
+          notification_type?: string
+          priority?: string | null
+          recipient_id?: string
+          sender_id?: string | null
+          title?: string
+        }
+        Relationships: []
       }
       parent_feedback: {
         Row: {
@@ -3523,9 +3667,12 @@ export type Database = {
       }
       user_profiles: {
         Row: {
+          address: string | null
           college_id: string
           created_at: string | null
+          date_of_birth: string | null
           email: string
+          emergency_contact: Json | null
           first_name: string
           hierarchy_level:
             | Database["public"]["Enums"]["user_hierarchy_level"]
@@ -3533,14 +3680,19 @@ export type Database = {
           id: string
           is_active: boolean | null
           last_name: string
+          phone_number: string | null
+          profile_picture_url: string | null
           updated_at: string | null
           user_code: string
           user_type: Database["public"]["Enums"]["user_type"]
         }
         Insert: {
+          address?: string | null
           college_id: string
           created_at?: string | null
+          date_of_birth?: string | null
           email: string
+          emergency_contact?: Json | null
           first_name: string
           hierarchy_level?:
             | Database["public"]["Enums"]["user_hierarchy_level"]
@@ -3548,14 +3700,19 @@ export type Database = {
           id: string
           is_active?: boolean | null
           last_name: string
+          phone_number?: string | null
+          profile_picture_url?: string | null
           updated_at?: string | null
           user_code: string
           user_type: Database["public"]["Enums"]["user_type"]
         }
         Update: {
+          address?: string | null
           college_id?: string
           created_at?: string | null
+          date_of_birth?: string | null
           email?: string
+          emergency_contact?: Json | null
           first_name?: string
           hierarchy_level?:
             | Database["public"]["Enums"]["user_hierarchy_level"]
@@ -3563,6 +3720,8 @@ export type Database = {
           id?: string
           is_active?: boolean | null
           last_name?: string
+          phone_number?: string | null
+          profile_picture_url?: string | null
           updated_at?: string | null
           user_code?: string
           user_type?: Database["public"]["Enums"]["user_type"]
