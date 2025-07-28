@@ -92,7 +92,7 @@ export class APIGateway {
     }
   }
 
-  public async select<T>(
+  public async select<T = any>(
     table: TableName,
     query: any = {},
     useCache: boolean = true
@@ -121,7 +121,7 @@ export class APIGateway {
       }
 
       // Create new request
-      const requestPromise = this.executeWithRetry(async () => {
+      const requestPromise = this.executeWithRetry(async (): Promise<SupabaseResponse<T[]>> => {
         let queryBuilder = supabase.from(table).select(query.select || '*');
 
         // Apply filters
@@ -147,17 +147,19 @@ export class APIGateway {
           queryBuilder = queryBuilder.range(query.offset, query.offset + (query.limit || 10) - 1);
         }
 
-        return await dbSecurityValidator.validateAndExecuteQuery(
+        const result = await dbSecurityValidator.validateAndExecuteQuery(
           queryBuilder,
           'select',
           `${table}_select`
         );
+
+        return result as SupabaseResponse<T[]>;
       });
 
       // Store in request queue
       this.requestQueue.set(cacheKey, requestPromise);
 
-      const result = await requestPromise as SupabaseResponse<T[]>;
+      const result = await requestPromise;
       
       // Remove from queue
       this.requestQueue.delete(cacheKey);
@@ -206,7 +208,7 @@ export class APIGateway {
     }
   }
 
-  public async insert<T>(
+  public async insert<T = any>(
     table: TableName,
     data: any,
     options: { returning?: string } = {}
@@ -216,28 +218,42 @@ export class APIGateway {
     try {
       const sanitizedData = dbSecurityValidator.sanitizeUserInput(data);
       
-      const result = await this.executeWithRetry(async () => {
-        let queryBuilder = supabase.from(table).insert(sanitizedData);
-        
+      const result = await this.executeWithRetry(async (): Promise<SupabaseResponse<T>> => {
         if (options.returning) {
-          queryBuilder = queryBuilder.select(options.returning);
+          const insertResult = await supabase
+            .from(table)
+            .insert(sanitizedData)
+            .select(options.returning);
+          
+          const validatedResult = await dbSecurityValidator.validateAndExecuteQuery(
+            insertResult,
+            'insert',
+            `${table}_insert`
+          );
+          
+          return validatedResult as SupabaseResponse<T>;
+        } else {
+          const insertResult = await supabase
+            .from(table)
+            .insert(sanitizedData);
+          
+          const validatedResult = await dbSecurityValidator.validateAndExecuteQuery(
+            insertResult,
+            'insert',
+            `${table}_insert`
+          );
+          
+          return validatedResult as SupabaseResponse<T>;
         }
-
-        return await dbSecurityValidator.validateAndExecuteQuery(
-          queryBuilder,
-          'insert',
-          `${table}_insert`
-        );
       });
 
       const duration = performance.now() - startTime;
-      const typedResult = result as SupabaseResponse<T>;
 
-      if (typedResult.error) {
-        await this.logAPICall('INSERT', table, duration, false, typedResult.error.message);
+      if (result.error) {
+        await this.logAPICall('INSERT', table, duration, false, result.error.message);
         return {
           data: null,
-          error: typedResult.error.message,
+          error: result.error.message,
           success: false,
           timestamp: new Date().toISOString(),
         };
@@ -249,7 +265,7 @@ export class APIGateway {
       await this.logAPICall('INSERT', table, duration, true);
 
       return {
-        data: typedResult.data,
+        data: result.data,
         error: null,
         success: true,
         timestamp: new Date().toISOString(),
@@ -268,7 +284,7 @@ export class APIGateway {
     }
   }
 
-  public async update<T>(
+  public async update<T = any>(
     table: TableName,
     data: any,
     filters: Record<string, any>,
@@ -279,7 +295,7 @@ export class APIGateway {
     try {
       const sanitizedData = dbSecurityValidator.sanitizeUserInput(data);
       
-      const result = await this.executeWithRetry(async () => {
+      const result = await this.executeWithRetry(async (): Promise<SupabaseResponse<T>> => {
         let queryBuilder = supabase.from(table).update(sanitizedData);
 
         // Apply filters
@@ -288,24 +304,31 @@ export class APIGateway {
         });
         
         if (options.returning) {
-          queryBuilder = queryBuilder.select(options.returning);
+          const updateResult = await queryBuilder.select(options.returning);
+          const validatedResult = await dbSecurityValidator.validateAndExecuteQuery(
+            updateResult,
+            'update',
+            `${table}_update`
+          );
+          return validatedResult as SupabaseResponse<T>;
+        } else {
+          const updateResult = await queryBuilder;
+          const validatedResult = await dbSecurityValidator.validateAndExecuteQuery(
+            updateResult,
+            'update',
+            `${table}_update`
+          );
+          return validatedResult as SupabaseResponse<T>;
         }
-
-        return await dbSecurityValidator.validateAndExecuteQuery(
-          queryBuilder,
-          'update',
-          `${table}_update`
-        );
       });
 
       const duration = performance.now() - startTime;
-      const typedResult = result as SupabaseResponse<T>;
 
-      if (typedResult.error) {
-        await this.logAPICall('UPDATE', table, duration, false, typedResult.error.message);
+      if (result.error) {
+        await this.logAPICall('UPDATE', table, duration, false, result.error.message);
         return {
           data: null,
-          error: typedResult.error.message,
+          error: result.error.message,
           success: false,
           timestamp: new Date().toISOString(),
         };
@@ -317,7 +340,7 @@ export class APIGateway {
       await this.logAPICall('UPDATE', table, duration, true);
 
       return {
-        data: typedResult.data,
+        data: result.data,
         error: null,
         success: true,
         timestamp: new Date().toISOString(),
@@ -336,14 +359,14 @@ export class APIGateway {
     }
   }
 
-  public async delete<T>(
+  public async delete<T = any>(
     table: TableName,
     filters: Record<string, any>
   ): Promise<APIResponse<T>> {
     const startTime = performance.now();
 
     try {
-      const result = await this.executeWithRetry(async () => {
+      const result = await this.executeWithRetry(async (): Promise<SupabaseResponse<T>> => {
         let queryBuilder = supabase.from(table).delete();
 
         // Apply filters
@@ -351,21 +374,23 @@ export class APIGateway {
           queryBuilder = queryBuilder.eq(key, value);
         });
 
-        return await dbSecurityValidator.validateAndExecuteQuery(
-          queryBuilder,
+        const deleteResult = await queryBuilder;
+        const validatedResult = await dbSecurityValidator.validateAndExecuteQuery(
+          deleteResult,
           'delete',
           `${table}_delete`
         );
+        
+        return validatedResult as SupabaseResponse<T>;
       });
 
       const duration = performance.now() - startTime;
-      const typedResult = result as SupabaseResponse<T>;
 
-      if (typedResult.error) {
-        await this.logAPICall('DELETE', table, duration, false, typedResult.error.message);
+      if (result.error) {
+        await this.logAPICall('DELETE', table, duration, false, result.error.message);
         return {
           data: null,
-          error: typedResult.error.message,
+          error: result.error.message,
           success: false,
           timestamp: new Date().toISOString(),
         };
@@ -377,7 +402,7 @@ export class APIGateway {
       await this.logAPICall('DELETE', table, duration, true);
 
       return {
-        data: typedResult.data,
+        data: result.data,
         error: null,
         success: true,
         timestamp: new Date().toISOString(),
