@@ -1,4 +1,3 @@
-
 import React, { useState, useEffect } from 'react';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
@@ -44,7 +43,9 @@ const StudentAcademicRecord: React.FC = () => {
 
   const fetchAcademicRecords = async () => {
     try {
-      const response = await apiGateway.select('student_academic_records', {
+      // Changed from 'student_academic_records' to 'academic_records' or another valid table name
+      // You may need to adjust this based on your actual table name
+      const response = await apiGateway.select('academic_records', {
         filters: { student_id: profile?.id },
         order: { column: 'academic_year', ascending: false }
       });
