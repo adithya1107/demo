@@ -1,4 +1,3 @@
-
 import React, { useState, useEffect } from 'react';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
@@ -75,23 +74,30 @@ const StudentMarketplace = () => {
 
       if (error) throw error;
 
-      const formattedItems: MarketplaceItem[] = data?.map(item => ({
-        id: item.id,
-        seller_id: item.seller_id,
-        college_id: item.college_id,
-        title: item.title || '',
-        description: item.description || '',
-        price: item.price || 0,
-        condition: item.condition as 'new' | 'like_new' | 'good' | 'fair' | 'poor',
-        category: item.category || '',
-        images: item.images || [],
-        status: item.status as 'active' | 'sold' | 'reserved',
-        created_at: item.created_at,
-        seller_name: item.user_profiles 
-          ? `${item.user_profiles.first_name || ''} ${item.user_profiles.last_name || ''}`.trim()
-          : 'Unknown',
-        seller_contact: item.user_profiles?.email || ''
-      })) || [];
+      const formattedItems: MarketplaceItem[] = data?.map(item => {
+        // Assume item.user_profiles is an array due to the foreign key relation
+        const userProfile = Array.isArray(item.user_profiles) && item.user_profiles.length > 0
+          ? item.user_profiles[0]
+          : null;
+
+        return {
+          id: item.id,
+          seller_id: item.seller_id,
+          college_id: item.college_id,
+          title: item.title || '',
+          description: item.description || '',
+          price: item.price || 0,
+          condition: item.condition as 'new' | 'like_new' | 'good' | 'fair' | 'poor',
+          category: item.category || '',
+          images: item.images || [],
+          status: item.status as 'active' | 'sold' | 'reserved',
+          created_at: item.created_at,
+          seller_name: userProfile
+            ? `${userProfile.first_name || ''} ${userProfile.last_name || ''}`.trim()
+            : 'Unknown',
+          seller_contact: userProfile?.email || ''
+        };
+      }) || [];
 
       setItems(formattedItems);
     } catch (error) {
