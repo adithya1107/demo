@@ -1,4 +1,3 @@
-
 import React, { useState, useEffect } from 'react';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
@@ -20,7 +19,12 @@ const SecurityDashboard = () => {
     const currentMetrics = securityMonitor.getMetrics();
     
     setThreats(recentThreats);
-    setMetrics(currentMetrics);
+    setMetrics({
+      totalThreats: currentMetrics.totalThreats,
+      blockedThreats: currentMetrics.blockedThreats,
+      criticalThreats: currentMetrics.criticalThreats,
+      lastThreatTime: currentMetrics.lastThreatTime
+    });
   };
 
   useEffect(() => {

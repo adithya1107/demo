@@ -41,7 +41,8 @@ const PermissionWrapper: React.FC<PermissionWrapperProps> = ({
           permission,
           userType: userType,
           profileId: profile?.id
-        }
+        },
+        blocked: true
       });
     }
   }, [loading, permissions, permission, userType, userId, profile]);

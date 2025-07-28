@@ -1,8 +1,9 @@
+
 import { auditLogger } from './auditLogger';
 
 export interface SecurityThreat {
   id: string;
-  type: 'brute_force' | 'xss_attempt' | 'sql_injection' | 'csrf' | 'suspicious_activity';
+  type: 'brute_force' | 'xss_attempt' | 'sql_injection' | 'csrf' | 'suspicious_activity' | 'privilege_escalation';
   severity: 'low' | 'medium' | 'high' | 'critical';
   description: string;
   timestamp: Date;
@@ -10,6 +11,7 @@ export interface SecurityThreat {
   ipAddress?: string;
   userId?: string;
   blocked: boolean;
+  metadata?: any;
 }
 
 export interface SecurityMetrics {
@@ -22,7 +24,7 @@ export interface SecurityMetrics {
 export class SecurityMonitor {
   private static instance: SecurityMonitor;
   private threats: SecurityThreat[] = [];
-  private maxThreats = 1000; // Keep last 1000 threats
+  private maxThreats = 1000;
 
   private constructor() {}
 
@@ -33,7 +35,7 @@ export class SecurityMonitor {
     return SecurityMonitor.instance;
   }
 
-  public logThreat(threat: Omit<SecurityThreat, 'id' | 'timestamp'>): void {
+  public reportThreat(threat: Omit<SecurityThreat, 'id' | 'timestamp'>): void {
     const newThreat: SecurityThreat = {
       ...threat,
       id: crypto.randomUUID(),
@@ -42,12 +44,10 @@ export class SecurityMonitor {
 
     this.threats.unshift(newThreat);
     
-    // Keep only the latest threats
     if (this.threats.length > this.maxThreats) {
       this.threats = this.threats.slice(0, this.maxThreats);
     }
 
-    // Log to audit system
     auditLogger.logSecurityEvent(
       threat.type,
       threat.description,
@@ -55,6 +55,32 @@ export class SecurityMonitor {
     );
 
     console.warn('Security threat detected:', newThreat);
+  }
+
+  public logThreat(threat: Omit<SecurityThreat, 'id' | 'timestamp'>): void {
+    this.reportThreat(threat);
+  }
+
+  public checkRateLimit(identifier: string, maxAttempts: number = 5, windowMs: number = 15 * 60 * 1000): boolean {
+    const now = Date.now();
+    const key = `rate_limit_${identifier}`;
+    
+    const attempts = JSON.parse(localStorage.getItem(key) || '[]');
+    const validAttempts = attempts.filter((timestamp: number) => now - timestamp < windowMs);
+    
+    if (validAttempts.length >= maxAttempts) {
+      this.reportThreat({
+        type: 'brute_force',
+        severity: 'high',
+        description: `Rate limit exceeded for ${identifier}`,
+        blocked: true
+      });
+      return false;
+    }
+    
+    validAttempts.push(now);
+    localStorage.setItem(key, JSON.stringify(validAttempts));
+    return true;
   }
 
   public getRecentThreats(limit: number = 10): SecurityThreat[] {
@@ -89,7 +115,7 @@ export class SecurityMonitor {
     const hasSQLPattern = sqlPatterns.some(pattern => pattern.test(input));
     
     if (hasSQLPattern) {
-      this.logThreat({
+      this.reportThreat({
         type: 'sql_injection',
         severity: 'high',
         description: `SQL injection attempt detected in input: ${input.substring(0, 100)}...`,
@@ -112,7 +138,7 @@ export class SecurityMonitor {
     const hasXSSPattern = xssPatterns.some(pattern => pattern.test(input));
     
     if (hasXSSPattern) {
-      this.logThreat({
+      this.reportThreat({
         type: 'xss_attempt',
         severity: 'high',
         description: `XSS attempt detected in input: ${input.substring(0, 100)}...`,
