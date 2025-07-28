@@ -1,4 +1,3 @@
-
 import React, { useState, useEffect } from 'react';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
@@ -28,6 +27,15 @@ interface CourseGrade {
   marks: number;
 }
 
+interface EnrollmentData {
+  grade: string;
+  courses: {
+    course_name: string;
+    course_code: string;
+    credits: number;
+  };
+}
+
 const StudentAcademicRecord: React.FC = () => {
   const { profile } = useUserProfile();
   const [academicRecords, setAcademicRecords] = useState<AcademicRecord[]>([]);
@@ -44,14 +52,43 @@ const StudentAcademicRecord: React.FC = () => {
 
   const fetchAcademicRecords = async () => {
     try {
-      const { data, error } = await supabase
-        .from('student_academic_records')
-        .select('*')
-        .eq('student_id', profile?.id)
-        .order('academic_year', { ascending: false });
+      // Since student_academic_records table doesn't exist, 
+      // we'll create mock data or fetch from an alternative source
+      // You might need to create this table or use existing tables
+      
+      // For now, creating mock data based on enrollments
+      const { data: enrollments, error } = await supabase
+        .from('enrollments')
+        .select(`
+          grade,
+          courses (
+            credits
+          )
+        `)
+        .eq('student_id', profile?.id);
 
       if (error) throw error;
-      setAcademicRecords(data || []);
+
+      // Calculate academic record from enrollments
+      const currentYear = new Date().getFullYear();
+      const totalCredits = enrollments?.reduce((sum, enrollment) => 
+        sum + (enrollment.courses?.credits || 0), 0) || 0;
+      
+      const completedCredits = enrollments?.filter(e => e.grade && e.grade !== 'F')
+        .reduce((sum, enrollment) => sum + (enrollment.courses?.credits || 0), 0) || 0;
+
+      const mockRecord: AcademicRecord = {
+        id: '1',
+        academic_year: `${currentYear}-${currentYear + 1}`,
+        semester: 'Current Semester',
+        cgpa: 0, // You'll need to implement GPA calculation
+        sgpa: 0, // You'll need to implement GPA calculation
+        total_credits: totalCredits,
+        completed_credits: completedCredits,
+        academic_status: 'Active'
+      };
+
+      setAcademicRecords([mockRecord]);
     } catch (error) {
       console.error('Error fetching academic records:', error);
       toast({
@@ -79,7 +116,7 @@ const StudentAcademicRecord: React.FC = () => {
 
       if (error) throw error;
       
-      const grades = data?.map(enrollment => ({
+      const grades: CourseGrade[] = (data as EnrollmentData[])?.map(enrollment => ({
         course_name: enrollment.courses.course_name,
         course_code: enrollment.courses.course_code,
         credits: enrollment.courses.credits,
