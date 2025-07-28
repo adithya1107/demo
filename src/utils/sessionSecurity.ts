@@ -1,102 +1,73 @@
 
 import { supabase } from '@/integrations/supabase/client';
+import { auditLogger } from './auditLogger';
 
 // Session security utilities
-export class SessionManager {
-  private static instance: SessionManager;
-  private sessionTimeout: number = 30 * 60 * 1000; // 30 minutes
-  private warningTimeout: number = 5 * 60 * 1000; // 5 minutes before expiry
-  private activityTimer: NodeJS.Timeout | null = null;
-  private warningTimer: NodeJS.Timeout | null = null;
-  private onWarning?: () => void;
-  private onTimeout?: () => void;
-
-  private constructor() {}
-
-  public static getInstance(): SessionManager {
-    if (!SessionManager.instance) {
-      SessionManager.instance = new SessionManager();
-    }
-    return SessionManager.instance;
-  }
-
-  public startSession(onWarning?: () => void, onTimeout?: () => void): void {
-    this.onWarning = onWarning;
-    this.onTimeout = onTimeout;
-    this.resetTimer();
-    this.setupActivityListeners();
-  }
-
-  public endSession(): void {
-    this.clearTimers();
-    this.removeActivityListeners();
-  }
-
-  private resetTimer(): void {
-    this.clearTimers();
-    
-    // Set warning timer
-    this.warningTimer = setTimeout(() => {
-      this.onWarning?.();
-    }, this.sessionTimeout - this.warningTimeout);
-    
-    // Set timeout timer
-    this.activityTimer = setTimeout(() => {
-      this.handleSessionTimeout();
-    }, this.sessionTimeout);
-  }
-
-  private clearTimers(): void {
-    if (this.activityTimer) {
-      clearTimeout(this.activityTimer);
-      this.activityTimer = null;
-    }
-    if (this.warningTimer) {
-      clearTimeout(this.warningTimer);
-      this.warningTimer = null;
-    }
-  }
-
-  private handleSessionTimeout(): void {
-    this.endSession();
-    this.signOut();
-    this.onTimeout?.();
-  }
-
-  private async signOut(): Promise<void> {
-    try {
-      await supabase.auth.signOut();
-      localStorage.clear();
-      sessionStorage.clear();
-    } catch (error) {
-      console.error('Error signing out:', error);
-    }
-  }
-
-  private setupActivityListeners(): void {
-    const events = ['mousedown', 'mousemove', 'keypress', 'scroll', 'touchstart'];
-    events.forEach(event => {
-      document.addEventListener(event, this.handleUserActivity, true);
-    });
-  }
-
-  private removeActivityListeners(): void {
-    const events = ['mousedown', 'mousemove', 'keypress', 'scroll', 'touchstart'];
-    events.forEach(event => {
-      document.removeEventListener(event, this.handleUserActivity, true);
-    });
-  }
-
-  private handleUserActivity = (): void => {
-    this.resetTimer();
-  };
-
-  public extendSession(): void {
-    this.resetTimer();
-  }
-}
-
 export const validateSessionIntegrity = async (): Promise<boolean> => {
+  try {
+    // Check if we have a valid session
+    const { data: { session }, error } = await supabase.auth.getSession();
+    
+    if (error) {
+      console.error('Session validation error:', error);
+      return false;
+    }
+
+    if (!session) {
+      return false;
+    }
+
+    // Check if session is expired
+    if (session.expires_at && session.expires_at * 1000 < Date.now()) {
+      console.warn('Session expired');
+      return false;
+    }
+
+    // Verify with server
+    const { data: { user }, error: userError } = await supabase.auth.getUser();
+    
+    if (userError || !user) {
+      console.error('User validation error:', userError);
+      return false;
+    }
+
+    return true;
+  } catch (error) {
+    console.error('Session integrity check failed:', error);
+    return false;
+  }
+};
+
+export const secureLogout = async (): Promise<void> => {
+  try {
+    // Log the logout event
+    await auditLogger.logUserAction(
+      'user_logout',
+      'User initiated logout',
+      'authentication'
+    );
+
+    // Clear Supabase session
+    await supabase.auth.signOut();
+    
+    // Clear all local storage
+    localStorage.clear();
+    sessionStorage.clear();
+    
+    // Clear any cookies if needed
+    document.cookie.split(";").forEach(function(c) { 
+      document.cookie = c.replace(/^ +/, "").replace(/=.*/, "=;expires=" + new Date().toUTCString() + ";path=/"); 
+    });
+    
+  } catch (error) {
+    console.error('Logout error:', error);
+    // Force clear even on error
+    localStorage.clear();
+    sessionStorage.clear();
+  }
+};
+
+export const refreshSessionIfNeeded = async (): Promise<boolean> => {
   try {
     const { data: { session }, error } = await supabase.auth.getSession();
     
@@ -104,42 +75,25 @@ export const validateSessionIntegrity = async (): Promise<boolean> => {
       return false;
     }
 
-    // Check if session is expired
-    const now = new Date().getTime();
-    const expiresAt = new Date(session.expires_at || 0).getTime();
+    // Check if session expires within 5 minutes
+    const expiresAt = session.expires_at * 1000;
+    const fiveMinutesFromNow = Date.now() + (5 * 60 * 1000);
     
-    if (now >= expiresAt) {
-      await supabase.auth.signOut();
-      return false;
+    if (expiresAt < fiveMinutesFromNow) {
+      const { data: { session: newSession }, error: refreshError } = await supabase.auth.refreshSession();
+      
+      if (refreshError || !newSession) {
+        console.error('Session refresh failed:', refreshError);
+        return false;
+      }
+      
+      console.log('Session refreshed successfully');
+      return true;
     }
-
-    // Validate session with server
-    const { data: user, error: userError } = await supabase.auth.getUser();
     
-    if (userError || !user) {
-      await supabase.auth.signOut();
-      return false;
-    }
-
     return true;
   } catch (error) {
-    console.error('Session validation error:', error);
-    return false;
-  }
-};
-
-export const refreshSession = async (): Promise<boolean> => {
-  try {
-    const { data, error } = await supabase.auth.refreshSession();
-    
-    if (error || !data.session) {
-      await supabase.auth.signOut();
-      return false;
-    }
-
-    return true;
-  } catch (error) {
-    console.error('Session refresh error:', error);
+    console.error('Session refresh check failed:', error);
     return false;
   }
 };

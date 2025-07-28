@@ -1,3 +1,4 @@
+
 // Security utilities for input sanitization and validation
 
 // XSS Prevention utilities
@@ -90,7 +91,7 @@ export const validateEmail = (email: string): boolean => {
   }
   
   const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
-  return emailRegex.test(email) && email.length <= 320; // RFC 5321 limit
+  return emailRegex.test(email) && email.length <= 320 && email.length >= 5;
 };
 
 export const validatePassword = (password: string): {
@@ -140,7 +141,7 @@ export const validateUserCode = (userCode: string): boolean => {
   }
   
   // User code should be alphanumeric and 6-12 characters
-  const userCodeRegex = /^[a-zA-Z0-9]{6,12}$/;
+  const userCodeRegex = /^[A-Z0-9]{6,12}$/;
   return userCodeRegex.test(userCode);
 };
 
@@ -150,7 +151,7 @@ export const validateCollegeCode = (collegeCode: string): boolean => {
   }
   
   // College code should be alphanumeric and 3-8 characters
-  const collegeCodeRegex = /^[a-zA-Z0-9]{3,8}$/;
+  const collegeCodeRegex = /^[A-Z0-9]{3,8}$/;
   return collegeCodeRegex.test(collegeCode);
 };
 
@@ -159,8 +160,8 @@ export const sanitizeInput = (input: string, maxLength: number = 1000): string =
     return '';
   }
   
-  // Remove null bytes and control characters
-  let sanitized = input.replace(/\0/g, '').replace(/[\x00-\x1F\x7F]/g, '');
+  // Remove only null bytes - allow normal characters
+  let sanitized = input.replace(/\0/g, '');
   
   // Trim whitespace
   sanitized = sanitized.trim();

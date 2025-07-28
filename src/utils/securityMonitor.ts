@@ -1,226 +1,179 @@
-import { auditLogger } from './auditLogger';
-import { RateLimiter } from './security';
 
-export interface SecurityThreat {
-  id: string;
-  type: 'brute_force' | 'injection' | 'xss' | 'csrf' | 'privilege_escalation' | 'suspicious_activity';
+import { auditLogger } from './auditLogger';
+
+interface ThreatReport {
+  type: 'brute_force' | 'suspicious_activity' | 'privilege_escalation' | 'data_breach';
   severity: 'low' | 'medium' | 'high' | 'critical';
   description: string;
-  timestamp: Date;
-  userAgent?: string;
-  ipAddress?: string;
   userId?: string;
+  userAgent?: string;
   metadata?: Record<string, any>;
 }
 
-export class SecurityMonitor {
-  private static instance: SecurityMonitor;
-  private threats: SecurityThreat[] = [];
-  private suspiciousActivities: Map<string, number> = new Map();
-  private rateLimiter: RateLimiter;
-  private alertThresholds = {
-    low: 10,
-    medium: 5,
-    high: 3,
-    critical: 1,
+interface RateLimitConfig {
+  maxAttempts: number;
+  windowMs: number;
+}
+
+class SecurityMonitor {
+  private rateLimits: Map<string, number[]> = new Map();
+  private suspiciousPatterns: RegExp[] = [
+    /(<script[^>]*>.*?<\/script>)/gi,
+    /(javascript:\s*[^;]*)/gi,
+    /(on\w+\s*=\s*["'][^"']*["'])/gi,
+    /(eval\s*\([^)]*\))/gi,
+    /(document\.write)/gi,
+    /(window\.location)/gi,
+    /(cookie)/gi,
+    /(localStorage)/gi,
+    /(sessionStorage)/gi,
+    /(innerHTML)/gi,
+    /(outerHTML)/gi
+  ];
+
+  private defaultRateLimit: RateLimitConfig = {
+    maxAttempts: 10,
+    windowMs: 60 * 1000 // 1 minute
   };
 
-  private constructor() {
-    this.rateLimiter = new RateLimiter(100, 60000); // 100 requests per minute
-    this.startPeriodicCleanup();
-  }
-
-  public static getInstance(): SecurityMonitor {
-    if (!SecurityMonitor.instance) {
-      SecurityMonitor.instance = new SecurityMonitor();
-    }
-    return SecurityMonitor.instance;
-  }
-
-  public async reportThreat(threat: Omit<SecurityThreat, 'id' | 'timestamp'>): Promise<void> {
-    const fullThreat: SecurityThreat = {
-      ...threat,
-      id: this.generateThreatId(),
-      timestamp: new Date(),
-    };
-
-    this.threats.push(fullThreat);
-
-    // Log to audit system
-    await auditLogger.logSecurityEvent(
-      threat.type,
-      threat.description,
-      threat.severity
-    );
-
-    // Check if we need to trigger alerts
-    await this.checkAlertThresholds(threat.severity);
-
-    // Auto-response for critical threats
-    if (threat.severity === 'critical') {
-      await this.handleCriticalThreat(fullThreat);
-    }
-
-    console.warn(`Security Threat Detected:`, fullThreat);
-  }
-
-  public async monitorUserActivity(
-    userId: string,
-    activity: string,
-    metadata?: Record<string, any>
-  ): Promise<void> {
-    const key = `${userId}:${activity}`;
-    const count = this.suspiciousActivities.get(key) || 0;
-    
-    this.suspiciousActivities.set(key, count + 1);
-
-    // Check for suspicious patterns
-    if (count > 10) {
-      await this.reportThreat({
-        type: 'suspicious_activity',
-        severity: 'medium',
-        description: `User ${userId} performed ${activity} ${count + 1} times`,
-        userId,
-        metadata,
-      });
-    }
-  }
-
-  public async checkRateLimit(identifier: string): Promise<boolean> {
-    const allowed = this.rateLimiter.isAllowed(identifier);
-    
-    if (!allowed) {
-      await this.reportThreat({
-        type: 'brute_force',
-        severity: 'high',
-        description: `Rate limit exceeded for ${identifier}`,
-        metadata: { identifier },
-      });
-    }
-    
-    return allowed;
-  }
-
-  public async detectInjectionAttempt(
-    input: string,
-    context: string,
-    userId?: string
+  async checkRateLimit(
+    identifier: string, 
+    config: RateLimitConfig = this.defaultRateLimit
   ): Promise<boolean> {
-    const injectionPatterns = [
-      /(\b(SELECT|INSERT|UPDATE|DELETE|DROP|CREATE|ALTER|EXEC|UNION)\b)/gi,
-      /<script[^>]*>.*?<\/script>/gi,
-      /javascript:/gi,
-      /on\w+\s*=/gi,
-      /expression\s*\(/gi,
-      /eval\s*\(/gi,
-      /document\./gi,
-      /window\./gi,
-      /localStorage/gi,
-      /sessionStorage/gi,
-      /cookie/gi,
-    ];
-
-    const isInjection = injectionPatterns.some(pattern => pattern.test(input));
-    
-    if (isInjection) {
-      await this.reportThreat({
-        type: 'injection',
-        severity: 'high',
-        description: `Injection attempt detected in ${context}`,
-        userId,
-        metadata: { input: input.substring(0, 100), context },
-      });
-    }
-    
-    return isInjection;
-  }
-
-  public async detectPrivilegeEscalation(
-    userId: string,
-    attemptedAction: string,
-    requiredRole: string,
-    actualRole: string
-  ): Promise<void> {
-    await this.reportThreat({
-      type: 'privilege_escalation',
-      severity: 'critical',
-      description: `User attempted ${attemptedAction} without proper permissions`,
-      userId,
-      metadata: {
-        attemptedAction,
-        requiredRole,
-        actualRole,
-      },
-    });
-  }
-
-  public getRecentThreats(hours: number = 24): SecurityThreat[] {
-    const cutoff = new Date(Date.now() - hours * 60 * 60 * 1000);
-    return this.threats.filter(threat => threat.timestamp >= cutoff);
-  }
-
-  public getThreatsByType(type: SecurityThreat['type']): SecurityThreat[] {
-    return this.threats.filter(threat => threat.type === type);
-  }
-
-  public getThreatsBySeverity(severity: SecurityThreat['severity']): SecurityThreat[] {
-    return this.threats.filter(threat => threat.severity === severity);
-  }
-
-  private generateThreatId(): string {
-    return `threat_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`;
-  }
-
-  private async checkAlertThresholds(severity: SecurityThreat['severity']): Promise<void> {
-    const recentThreats = this.getRecentThreats(1); // Last hour
-    const severityCount = recentThreats.filter(t => t.severity === severity).length;
-    
-    if (severityCount >= this.alertThresholds[severity]) {
-      await this.triggerSecurityAlert(severity, severityCount);
-    }
-  }
-
-  private async triggerSecurityAlert(
-    severity: SecurityThreat['severity'],
-    count: number
-  ): Promise<void> {
-    await auditLogger.logSecurityEvent(
-      'security_alert',
-      `Security alert triggered: ${count} ${severity} threats in the last hour`,
-      'critical'
-    );
-
-    // In production, this would send notifications to security team
-    console.error(`🚨 SECURITY ALERT: ${count} ${severity} threats detected in the last hour`);
-  }
-
-  private async handleCriticalThreat(threat: SecurityThreat): Promise<void> {
-    // Implement immediate response actions
-    if (threat.userId) {
-      await auditLogger.logSecurityEvent(
-        'critical_threat_response',
-        `Critical threat detected for user ${threat.userId}`,
-        'critical'
-      );
-    }
-
-    // In production, this might:
-    // - Temporarily disable user account
-    // - Send immediate notifications
-    // - Trigger additional monitoring
-    // - Log to external security systems
-  }
-
-  private startPeriodicCleanup(): void {
-    setInterval(() => {
-      // Clean up old threats (keep last 7 days)
-      const cutoff = new Date(Date.now() - 7 * 24 * 60 * 60 * 1000);
-      this.threats = this.threats.filter(threat => threat.timestamp >= cutoff);
+    try {
+      const now = Date.now();
+      const attempts = this.rateLimits.get(identifier) || [];
       
-      // Clean up suspicious activities
-      this.suspiciousActivities.clear();
-    }, 60 * 60 * 1000); // Run every hour
+      // Remove old attempts outside the window
+      const validAttempts = attempts.filter(time => now - time < config.windowMs);
+      
+      if (validAttempts.length >= config.maxAttempts) {
+        await this.reportThreat({
+          type: 'brute_force',
+          severity: 'high',
+          description: `Rate limit exceeded for identifier: ${identifier}`,
+          metadata: {
+            attempts: validAttempts.length,
+            maxAttempts: config.maxAttempts,
+            windowMs: config.windowMs
+          }
+        });
+        return false;
+      }
+      
+      // Add current attempt
+      validAttempts.push(now);
+      this.rateLimits.set(identifier, validAttempts);
+      
+      return true;
+    } catch (error) {
+      console.error('Rate limit check error:', error);
+      return true; // Allow on error to prevent blocking legitimate users
+    }
+  }
+
+  async detectInjectionAttempt(input: string, context: string): Promise<boolean> {
+    try {
+      const hasSuspiciousPattern = this.suspiciousPatterns.some(pattern => 
+        pattern.test(input)
+      );
+
+      if (hasSuspiciousPattern) {
+        await this.reportThreat({
+          type: 'suspicious_activity',
+          severity: 'medium',
+          description: `Potential injection attempt detected in ${context}`,
+          metadata: {
+            input: input.substring(0, 100), // Truncate for logging
+            context
+          }
+        });
+        return true;
+      }
+
+      return false;
+    } catch (error) {
+      console.error('Injection detection error:', error);
+      return false;
+    }
+  }
+
+  async reportThreat(threat: ThreatReport): Promise<void> {
+    try {
+      console.warn('Security threat detected:', threat);
+      
+      // Log to audit system
+      await auditLogger.logSecurityEvent(
+        threat.type,
+        threat.description,
+        threat.severity,
+        threat.userId,
+        threat.metadata
+      );
+
+      // In a production environment, you might want to:
+      // 1. Send to external security monitoring service
+      // 2. Alert administrators
+      // 3. Implement automatic blocking
+      // 4. Update WAF rules
+      
+      // For now, we'll just log to console and audit
+      if (threat.severity === 'critical' || threat.severity === 'high') {
+        console.error('HIGH SEVERITY THREAT:', threat);
+      }
+    } catch (error) {
+      console.error('Failed to report threat:', error);
+    }
+  }
+
+  async validateUserAction(
+    userId: string,
+    action: string,
+    resource: string,
+    metadata?: Record<string, any>
+  ): Promise<boolean> {
+    try {
+      // Basic validation - can be extended with more complex rules
+      if (!userId || !action || !resource) {
+        await this.reportThreat({
+          type: 'suspicious_activity',
+          severity: 'medium',
+          description: 'Invalid user action parameters',
+          userId,
+          metadata: { action, resource, ...metadata }
+        });
+        return false;
+      }
+
+      // Log valid actions for audit trail
+      await auditLogger.logUserAction(action, `User action on ${resource}`, 'user_action', userId);
+      
+      return true;
+    } catch (error) {
+      console.error('User action validation error:', error);
+      return false;
+    }
+  }
+
+  clearRateLimit(identifier: string): void {
+    this.rateLimits.delete(identifier);
+  }
+
+  getRateLimitStatus(identifier: string): {
+    attempts: number;
+    remaining: number;
+    resetTime: number;
+  } {
+    const now = Date.now();
+    const attempts = this.rateLimits.get(identifier) || [];
+    const validAttempts = attempts.filter(time => now - time < this.defaultRateLimit.windowMs);
+    
+    return {
+      attempts: validAttempts.length,
+      remaining: Math.max(0, this.defaultRateLimit.maxAttempts - validAttempts.length),
+      resetTime: validAttempts.length > 0 ? Math.max(...validAttempts) + this.defaultRateLimit.windowMs : now
+    };
   }
 }
 
-export const securityMonitor = SecurityMonitor.getInstance();
+export const securityMonitor = new SecurityMonitor();

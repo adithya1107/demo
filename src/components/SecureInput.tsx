@@ -25,18 +25,14 @@ const SecureInput = forwardRef<HTMLInputElement, SecureInputProps>(
     const handleChange = useCallback((e: React.ChangeEvent<HTMLInputElement>) => {
       const rawValue = e.target.value;
       
-      // Check for potentially malicious input
+      // Only check for extremely malicious patterns, not basic characters
       const maliciousPatterns = [
-        /<script/gi,
-        /javascript:/gi,
-        /on\w+\s*=/gi,
-        /eval\s*\(/gi,
-        /document\./gi,
-        /window\./gi,
-        /location\./gi,
-        /cookie/gi,
-        /localStorage/gi,
-        /sessionStorage/gi
+        /<script[^>]*>.*?<\/script>/gi,
+        /javascript:\s*[^;]*/gi,
+        /on\w+\s*=\s*["'][^"']*["']/gi,
+        /eval\s*\(\s*[^)]*\)/gi,
+        /document\.write/gi,
+        /window\.location\s*=/gi
       ];
 
       const hasMaliciousContent = maliciousPatterns.some(pattern => 
@@ -56,16 +52,22 @@ const SecureInput = forwardRef<HTMLInputElement, SecureInputProps>(
         // Clear the warning after 5 seconds
         setTimeout(() => setHasSecurityWarning(false), 5000);
         
-        // Prevent the malicious input from being processed
+        // Block malicious input but allow normal characters
         return;
       }
 
-      // Sanitize the input
-      let sanitizedValue = sanitizeInput(rawValue, maxLength);
+      // Light sanitization - only remove null bytes and extreme control characters
+      let sanitizedValue = rawValue.replace(/\0/g, '');
+      
+      // Apply length restriction
+      if (sanitizedValue.length > maxLength) {
+        sanitizedValue = sanitizedValue.substring(0, maxLength);
+      }
 
-      // Apply character restrictions if specified
-      if (allowedChars && !allowedChars.test(sanitizedValue)) {
-        sanitizedValue = sanitizedValue.replace(new RegExp(`[^${allowedChars.source}]`, 'g'), '');
+      // Apply character restrictions only if specified and value doesn't match
+      if (allowedChars && sanitizedValue && !allowedChars.test(sanitizedValue)) {
+        // Only filter out characters that don't match, don't clear the entire input
+        sanitizedValue = sanitizedValue.split('').filter(char => allowedChars.test(char)).join('');
       }
 
       // Create a new event with the sanitized value
@@ -86,7 +88,7 @@ const SecureInput = forwardRef<HTMLInputElement, SecureInputProps>(
           {...props}
           ref={ref}
           onChange={handleChange}
-          className={`${props.className} ${hasSecurityWarning ? 'border-red-500 bg-red-50' : ''}`}
+          className={`${props.className || ''} ${hasSecurityWarning ? 'border-red-500 bg-red-50' : ''}`}
         />
         {hasSecurityWarning && (
           <div className="absolute -bottom-6 left-0 flex items-center text-xs text-red-600">
