@@ -1,4 +1,5 @@
 import React, { useState, useEffect } from 'react';
+import SmartDashboard from '@/components/dashboard/SmartDashboard';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
@@ -71,11 +72,11 @@ interface AdminDashboardProps {
 
 const AdminDashboard = ({ sessionData }: AdminDashboardProps) => {
   const navigate = useNavigate();
-  const [userProfile, setUserProfile] = useState<UserProfile | null>(null);
-  const [adminRoles, setAdminRoles] = useState<AdminRole[]>([]);
+  const [userProfile, setUserProfile] = useState<any>(null);
+  const [adminRoles, setAdminRoles] = useState<any[]>([]);
   const [isLoading, setIsLoading] = useState(true);
   const [activeTab, setActiveTab] = useState('overview');
-  const [dashboardStats, setDashboardStats] = useState<DashboardStats>({
+  const [dashboardStats, setDashboardStats] = useState<any>({
     totalUsers: 0,
     activeUsers: 0,
     totalCourses: 0,
@@ -337,134 +338,10 @@ const AdminDashboard = ({ sessionData }: AdminDashboardProps) => {
             </TabsTrigger>
           </TabsList>
 
-          {/* Overview Tab */}
           <TabsContent value="overview" className="space-y-6">
-            {/* Stats Cards in Boxes */}
-            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6">
-              <Card className="hover:shadow-lg transition-shadow">
-                <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-                  <CardTitle className="text-sm font-medium">Total Users</CardTitle>
-                  <Users className="h-4 w-4 text-muted-foreground" />
-                </CardHeader>
-                <CardContent>
-                  <div className="text-2xl font-bold">{dashboardStats.totalUsers}</div>
-                  <p className="text-xs text-muted-foreground">
-                    {dashboardStats.activeUsers} active users
-                  </p>
-                </CardContent>
-              </Card>
-
-              <Card className="hover:shadow-lg transition-shadow">
-                <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-                  <CardTitle className="text-sm font-medium">Active Courses</CardTitle>
-                  <BookOpen className="h-4 w-4 text-muted-foreground" />
-                </CardHeader>
-                <CardContent>
-                  <div className="text-2xl font-bold">{dashboardStats.totalCourses}</div>
-                  <p className="text-xs text-muted-foreground">
-                    Across all departments
-                  </p>
-                </CardContent>
-              </Card>
-
-              <Card className="hover:shadow-lg transition-shadow">
-                <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-                  <CardTitle className="text-sm font-medium">Active Events</CardTitle>
-                  <Calendar className="h-4 w-4 text-muted-foreground" />
-                </CardHeader>
-                <CardContent>
-                  <div className="text-2xl font-bold">{dashboardStats.totalEvents}</div>
-                  <p className="text-xs text-muted-foreground">
-                    This semester
-                  </p>
-                </CardContent>
-              </Card>
-
-              <Card className="hover:shadow-lg transition-shadow">
-                <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-                  <CardTitle className="text-sm font-medium">Pending Tasks</CardTitle>
-                  <AlertCircle className="h-4 w-4 text-muted-foreground" />
-                </CardHeader>
-                <CardContent>
-                  <div className="text-2xl font-bold">{dashboardStats.pendingApprovals}</div>
-                  <p className="text-xs text-muted-foreground">
-                    Requires attention
-                  </p>
-                </CardContent>
-              </Card>
-            </div>
-
-            {/* Quick Actions Grid */}
-            <Card>
-              <CardHeader>
-                <CardTitle>Quick Actions</CardTitle>
-                <CardDescription>Common administrative tasks</CardDescription>
-              </CardHeader>
-              <CardContent>
-                <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
-                  <Button 
-                    variant="outline" 
-                    className="h-24 flex-col space-y-2 hover:bg-blue-50 hover:border-blue-300" 
-                    onClick={() => setActiveTab('users')}
-                  >
-                    <Users className="w-6 h-6 text-blue-600" />
-                    <span>Manage Users</span>
-                  </Button>
-                  <Button 
-                    variant="outline" 
-                    className="h-24 flex-col space-y-2 hover:bg-green-50 hover:border-green-300" 
-                    onClick={() => setActiveTab('courses')}
-                  >
-                    <BookOpen className="w-6 h-6 text-green-600" />
-                    <span>Add Course</span>
-                  </Button>
-                  <Button 
-                    variant="outline" 
-                    className="h-24 flex-col space-y-2 hover:bg-purple-50 hover:border-purple-300" 
-                    onClick={() => setActiveTab('events')}
-                  >
-                    <Calendar className="w-6 h-6 text-purple-600" />
-                    <span>Create Event</span>
-                  </Button>
-                  <Button 
-                    variant="outline" 
-                    className="h-24 flex-col space-y-2 hover:bg-orange-50 hover:border-orange-300" 
-                    onClick={() => setActiveTab('settings')}
-                  >
-                    <Settings className="w-6 h-6 text-orange-600" />
-                    <span>Settings</span>
-                  </Button>
-                </div>
-              </CardContent>
-            </Card>
-
-            {/* Recent Activity */}
-            <Card>
-              <CardHeader>
-                <CardTitle>Recent Activity</CardTitle>
-                <CardDescription>Latest system activities and updates</CardDescription>
-              </CardHeader>
-              <CardContent>
-                <div className="space-y-4">
-                  {dashboardStats.totalUsers > 0 ? (
-                    <div className="flex items-center space-x-4">
-                      <div className="w-2 h-2 bg-blue-500 rounded-full"></div>
-                      <div className="flex-1">
-                        <p className="text-sm">System initialized with {dashboardStats.totalUsers} users</p>
-                        <p className="text-xs text-gray-500">Today</p>
-                      </div>
-                    </div>
-                  ) : (
-                    <div className="text-center py-8 text-gray-500">
-                      <p>No recent activity to display</p>
-                    </div>
-                  )}
-                </div>
-              </CardContent>
-            </Card>
+            <SmartDashboard />
           </TabsContent>
 
-          {/* Other Tabs */}
           <TabsContent value="users">
             <EnhancedUserManagement userProfile={userProfile} adminRoles={adminRoles} />
           </TabsContent>
