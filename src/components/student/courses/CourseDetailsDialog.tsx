@@ -1,4 +1,4 @@
-import React from 'react';
+import React, { useState } from 'react';
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from '@/components/ui/dialog';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { Button } from '@/components/ui/button';
@@ -30,12 +30,32 @@ const CourseDetailsDialog: React.FC<CourseDetailsDialogProps> = ({
   certificates,
   onSubmitAssignment
 }) => {
+  const [submittingAssignments, setSubmittingAssignments] = useState<Set<string>>(new Set());
+
   const getSubmissionStatus = (assignmentId: string) => {
     return submissions.find(s => s.assignment_id === assignmentId);
   };
 
   const downloadCertificate = (certificateUrl: string) => {
     window.open(certificateUrl, '_blank');
+  };
+
+  // Create a submission handler for each assignment
+  const createSubmissionHandler = (assignment: any) => {
+    return async (text: string, fileUrl?: string) => {
+      setSubmittingAssignments(prev => new Set(prev).add(assignment.id));
+      try {
+        await onSubmitAssignment(assignment.id, text, fileUrl);
+      } catch (error) {
+        console.error('Error submitting assignment:', error);
+      } finally {
+        setSubmittingAssignments(prev => {
+          const newSet = new Set(prev);
+          newSet.delete(assignment.id);
+          return newSet;
+        });
+      }
+    };
   };
 
   if (!course) return null;
@@ -92,6 +112,7 @@ const CourseDetailsDialog: React.FC<CourseDetailsDialogProps> = ({
                 {assignments.map((assignment: any) => {
                   const submission = getSubmissionStatus(assignment.id);
                   const isOverdue = new Date(assignment.due_date) < new Date();
+                  const isSubmitting = submittingAssignments.has(assignment.id);
                   
                   return (
                     <Card key={assignment.id}>
@@ -120,7 +141,7 @@ const CourseDetailsDialog: React.FC<CourseDetailsDialogProps> = ({
                             <p className="text-sm text-green-800">
                               Submitted on: {new Date(submission.submitted_at).toLocaleDateString()}
                             </p>
-                            {submission.marks_obtained && (
+                            {submission.marks_obtained !== undefined && submission.marks_obtained !== null && (
                               <p className="text-sm text-green-800">
                                 Grade: {submission.marks_obtained}/{assignment.max_marks}
                               </p>
@@ -129,7 +150,8 @@ const CourseDetailsDialog: React.FC<CourseDetailsDialogProps> = ({
                         ) : !isOverdue && (
                           <AssignmentSubmissionForm 
                             assignment={assignment}
-                            onSubmitAssignment={onSubmitAssignment}
+                            onSubmit={createSubmissionHandler(assignment)}
+                            isSubmitting={isSubmitting}
                           />
                         )}
                       </CardContent>
