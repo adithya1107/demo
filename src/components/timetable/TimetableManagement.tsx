@@ -107,100 +107,29 @@ const TimetableManagement: React.FC = () => {
 
   const fetchTimetableSlots = async () => {
     try {
-      // First, get the basic timetable slots without relationships
+      // Use raw SQL query to avoid type issues
       const { data: slotsData, error: slotsError } = await supabase
-        .from('timetable_slots')
-        .select('*')
-        .eq('is_active', true);
+        .rpc('get_timetable_slots_raw');
 
       if (slotsError) {
-        console.error('Supabase error:', slotsError);
-        throw slotsError;
-      }
+        console.error('RPC error:', slotsError);
+        // Fallback to direct table access if RPC fails
+        const { data: fallbackData, error: fallbackError } = await supabase
+          .from('timetable_slots' as any)
+          .select('*')
+          .eq('is_active', true);
 
-      if (!slotsData || slotsData.length === 0) {
-        setTimetableSlots([]);
+        if (fallbackError) {
+          throw fallbackError;
+        }
+        
+        const rawSlots = (fallbackData as unknown as RawTimetableSlot[]) || [];
+        await processRawSlots(rawSlots);
         return;
       }
 
-      // Type the raw data
-      const rawSlots = slotsData as RawTimetableSlot[];
-
-      // Apply filtering based on user role before fetching related data
-      let filteredSlotsData = rawSlots;
-
-      if (profile?.user_type === 'student') {
-        try {
-          const { data: enrollments } = await supabase
-            .from('enrollments')
-            .select('course_id')
-            .eq('student_id', profile.id);
-
-          if (enrollments && enrollments.length > 0) {
-            const courseIds = enrollments.map(e => e.course_id);
-            filteredSlotsData = rawSlots.filter(slot => courseIds.includes(slot.course_id));
-          } else {
-            filteredSlotsData = [];
-          }
-        } catch (enrollmentError) {
-          console.error('Error fetching enrollments:', enrollmentError);
-        }
-      } else if (profile?.user_type === 'faculty') {
-        filteredSlotsData = rawSlots.filter(slot => slot.instructor_id === profile.id);
-      }
-
-      // Now fetch related data separately
-      const courseIds = [...new Set(filteredSlotsData.map(slot => slot.course_id))];
-      const roomIds = [...new Set(filteredSlotsData.map(slot => slot.room_id))];
-      const instructorIds = [...new Set(filteredSlotsData.map(slot => slot.instructor_id))];
-
-      // Fetch courses
-      const { data: coursesData } = await supabase
-        .from('courses')
-        .select('id, course_name, course_code')
-        .in('id', courseIds);
-
-      // Fetch rooms
-      const { data: roomsData } = await supabase
-        .from('rooms')
-        .select('id, room_number, building, floor')
-        .in('id', roomIds);
-
-      // Fetch instructors
-      const { data: instructorsData } = await supabase
-        .from('user_profiles')
-        .select('id, first_name, last_name')
-        .in('id', instructorIds);
-
-      // Type the fetched data
-      const courses = (coursesData || []) as RawCourse[];
-      const roomsDataTyped = (roomsData || []) as RawRoom[];
-      const instructors = (instructorsData || []) as RawInstructor[];
-
-      // Create lookup maps
-      const coursesMap = new Map(courses.map(course => [course.id, course]));
-      const roomsMap = new Map(roomsDataTyped.map(room => [room.id, room]));
-      const instructorsMap = new Map(instructors.map(instructor => [instructor.id, instructor]));
-
-      // Transform the data to match our interface
-      const transformedData: TimetableSlot[] = filteredSlotsData.map((slot) => ({
-        id: slot.id,
-        course_id: slot.course_id,
-        instructor_id: slot.instructor_id,
-        room_id: slot.room_id,
-        day_of_week: slot.day_of_week,
-        start_time: slot.start_time,
-        end_time: slot.end_time,
-        slot_type: slot.slot_type,
-        academic_year: slot.academic_year,
-        semester: slot.semester,
-        is_active: slot.is_active,
-        courses: coursesMap.get(slot.course_id) || { course_name: 'Unknown', course_code: 'N/A' },
-        rooms: roomsMap.get(slot.room_id) || { room_number: 'Unknown', building: 'Unknown', floor: 0 },
-        instructor: instructorsMap.get(slot.instructor_id) || { first_name: 'Unknown', last_name: 'Instructor' }
-      }));
-
-      setTimetableSlots(transformedData);
+      const rawSlots = (slotsData as RawTimetableSlot[]) || [];
+      await processRawSlots(rawSlots);
     } catch (error) {
       console.error('Error fetching timetable slots:', error);
       toast({
@@ -208,29 +137,136 @@ const TimetableManagement: React.FC = () => {
         description: 'Failed to fetch timetable',
         variant: 'destructive'
       });
-      setTimetableSlots([]); // Set empty array on error
+      setTimetableSlots([]);
     }
+  };
+
+  const processRawSlots = async (rawSlots: RawTimetableSlot[]) => {
+    if (!rawSlots || rawSlots.length === 0) {
+      setTimetableSlots([]);
+      return;
+    }
+
+    // Apply filtering based on user role before fetching related data
+    let filteredSlotsData = rawSlots;
+
+    if (profile?.user_type === 'student') {
+      try {
+        const { data: enrollments } = await supabase
+          .from('enrollments')
+          .select('course_id')
+          .eq('student_id', profile.id);
+
+        if (enrollments && enrollments.length > 0) {
+          const courseIds = enrollments.map(e => e.course_id);
+          filteredSlotsData = rawSlots.filter(slot => courseIds.includes(slot.course_id));
+        } else {
+          filteredSlotsData = [];
+        }
+      } catch (enrollmentError) {
+        console.error('Error fetching enrollments:', enrollmentError);
+      }
+    } else if (profile?.user_type === 'faculty') {
+      filteredSlotsData = rawSlots.filter(slot => slot.instructor_id === profile.id);
+    }
+
+    // Now fetch related data separately
+    const courseIds = [...new Set(filteredSlotsData.map(slot => slot.course_id))];
+    const roomIds = [...new Set(filteredSlotsData.map(slot => slot.room_id))];
+    const instructorIds = [...new Set(filteredSlotsData.map(slot => slot.instructor_id))];
+
+    // Fetch courses
+    const { data: coursesData } = await supabase
+      .from('courses')
+      .select('id, course_name, course_code')
+      .in('id', courseIds);
+
+    // Fetch rooms using RPC or fallback
+    let roomsDataTyped: RawRoom[] = [];
+    try {
+      const { data: roomsRpcData, error: roomsRpcError } = await supabase
+        .rpc('get_rooms_by_ids', { room_ids: roomIds });
+
+      if (roomsRpcError) {
+        // Fallback to direct table access
+        const { data: roomsFallback } = await supabase
+          .from('rooms' as any)
+          .select('id, room_number, building, floor')
+          .in('id', roomIds);
+        
+        roomsDataTyped = (roomsFallback as unknown as RawRoom[]) || [];
+      } else {
+        roomsDataTyped = (roomsRpcData as RawRoom[]) || [];
+      }
+    } catch (roomError) {
+      console.error('Error fetching rooms:', roomError);
+      roomsDataTyped = [];
+    }
+
+    // Fetch instructors
+    const { data: instructorsData } = await supabase
+      .from('user_profiles')
+      .select('id, first_name, last_name')
+      .in('id', instructorIds);
+
+    // Type the fetched data
+    const courses = (coursesData || []) as RawCourse[];
+    const instructors = (instructorsData || []) as RawInstructor[];
+
+    // Create lookup maps
+    const coursesMap = new Map(courses.map(course => [course.id, course]));
+    const roomsMap = new Map(roomsDataTyped.map(room => [room.id, room]));
+    const instructorsMap = new Map(instructors.map(instructor => [instructor.id, instructor]));
+
+    // Transform the data to match our interface
+    const transformedData: TimetableSlot[] = filteredSlotsData.map((slot) => ({
+      id: slot.id,
+      course_id: slot.course_id,
+      instructor_id: slot.instructor_id,
+      room_id: slot.room_id,
+      day_of_week: slot.day_of_week,
+      start_time: slot.start_time,
+      end_time: slot.end_time,
+      slot_type: slot.slot_type,
+      academic_year: slot.academic_year,
+      semester: slot.semester,
+      is_active: slot.is_active,
+      courses: coursesMap.get(slot.course_id) || { course_name: 'Unknown', course_code: 'N/A' },
+      rooms: roomsMap.get(slot.room_id) || { room_number: 'Unknown', building: 'Unknown', floor: 0 },
+      instructor: instructorsMap.get(slot.instructor_id) || { first_name: 'Unknown', last_name: 'Instructor' }
+    }));
+
+    setTimetableSlots(transformedData);
   };
 
   const fetchRooms = async () => {
     try {
-      const { data, error } = await supabase
-        .from('rooms')
-        .select('*')
-        .eq('college_id', profile?.college_id)
-        .eq('is_available', true)
-        .order('building', { ascending: true });
+      // Try RPC first, then fallback to direct access
+      const { data: rpcData, error: rpcError } = await supabase
+        .rpc('get_college_rooms', { college_id: profile?.college_id });
 
-      if (error) {
-        console.error('Supabase error:', error);
-        throw error;
+      if (rpcError) {
+        // Fallback to direct table access
+        const { data: fallbackData, error: fallbackError } = await supabase
+          .from('rooms' as any)
+          .select('*')
+          .eq('college_id', profile?.college_id)
+          .eq('is_available', true)
+          .order('building', { ascending: true });
+
+        if (fallbackError) {
+          throw fallbackError;
+        }
+
+        const roomsData = (fallbackData as unknown as Room[]) || [];
+        setRooms(roomsData);
+      } else {
+        const roomsData = (rpcData as Room[]) || [];
+        setRooms(roomsData);
       }
-
-      // Type the data properly
-      const roomsData = (data || []) as Room[];
-      setRooms(roomsData);
     } catch (error) {
       console.error('Error fetching rooms:', error);
+      setRooms([]);
     } finally {
       setLoading(false);
     }
