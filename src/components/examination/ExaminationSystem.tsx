@@ -137,7 +137,7 @@ const ExaminationSystem: React.FC = () => {
           .eq('student_id', profile.id);
 
         if (error) throw error;
-        setEnrollments((data as ExamEnrollment[]) || []); // Proper type casting
+        setEnrollments((data as unknown as ExamEnrollment[]) || []); // Convert through unknown
       }
     } catch (error) {
       console.error('Error fetching exam enrollments:', error);
@@ -170,7 +170,7 @@ const ExaminationSystem: React.FC = () => {
           .eq('is_valid', true);
 
         if (error) throw error;
-        setHallTickets((data as HallTicket[]) || []); // Proper type casting
+        setHallTickets((data as unknown as HallTicket[]) || []); // Convert through unknown
       }
     } catch (error) {
       console.error('Error fetching hall tickets:', error);
