@@ -7,12 +7,19 @@ import CourseCard from './courses/CourseCard';
 import CourseDetailsDialog from './courses/CourseDetailsDialog';
 import { useUserProfile } from '@/hooks/useUserProfile';
 
-// Define proper TypeScript interfaces
+// Define proper TypeScript interfaces matching the actual database schema
 interface Course {
   id: string;
-  title: string;
-  description?: string;
+  course_name: string;
+  course_code: string;
+  description: string;
+  credits: number;
+  semester: string;
+  academic_year: string;
   instructor_id: string;
+  college_id: string;
+  is_active: boolean;
+  max_students: number;
   created_at: string;
   updated_at: string;
 }
@@ -21,7 +28,10 @@ interface LectureMaterial {
   id: string;
   course_id: string;
   title: string;
-  content_url: string;
+  description: string;
+  file_url: string;
+  material_type: string;
+  uploaded_by: string;
   uploaded_at: string;
 }
 
@@ -31,6 +41,11 @@ interface Assignment {
   title: string;
   description: string;
   due_date: string;
+  max_marks: number;
+  assignment_type: string;
+  created_by: string;
+  created_at: string;
+  updated_at: string;
 }
 
 interface Submission {
@@ -40,14 +55,20 @@ interface Submission {
   submission_text: string;
   file_url?: string;
   submitted_at: string;
+  grade?: number;
+  feedback?: string;
 }
 
 interface Grade {
   id: string;
   student_id: string;
   course_id: string;
-  assignment_id?: string;
-  grade: number;
+  assignment_id: string;
+  marks_obtained: number;
+  max_marks: number;
+  grade_letter: string;
+  grade_type: string;
+  recorded_by: string;
   recorded_at: string;
 }
 
@@ -55,14 +76,30 @@ interface Certificate {
   id: string;
   student_id: string;
   course_id: string;
-  issued_at: string;
-  certificate_url?: string;
+  certificate_type: string;
+  certificate_url: string;
+  issued_by: string;
+  issued_date: string;
+  is_active: boolean;
 }
 
 interface MyCoursesProps {
   studentData?: {
     user_id: string;
   };
+}
+
+// Props interface for CourseDetailsDialog
+interface CourseDetailsDialogProps {
+  course: Course | null;
+  isOpen: boolean;
+  onClose: () => void;
+  lectureMaterials: LectureMaterial[];
+  assignments: Assignment[];
+  submissions: Submission[];
+  grades: Grade[];
+  certificates: Certificate[];
+  onSubmitAssignment: (assignmentId: string, submissionText: string, fileUrl?: string) => Promise<void>;
 }
 
 const MyCourses: React.FC<MyCoursesProps> = ({ studentData }) => {
@@ -98,7 +135,8 @@ const MyCourses: React.FC<MyCoursesProps> = ({ studentData }) => {
 
       if (error) throw error;
 
-      setCourses(enrollmentsData?.map(e => e.courses).filter(Boolean) || []);
+      const coursesData = enrollmentsData?.map(e => e.courses).filter(Boolean) || [];
+      setCourses(coursesData as Course[]);
     } catch (error) {
       console.error('Error fetching courses:', error);
       toast({
@@ -120,7 +158,7 @@ const MyCourses: React.FC<MyCoursesProps> = ({ studentData }) => {
         .eq('course_id', courseId)
         .order('uploaded_at', { ascending: false });
 
-      setLectureMaterials(materialsData || []);
+      setLectureMaterials(materialsData as LectureMaterial[] || []);
 
       // Fetch assignments
       const { data: assignmentsData } = await supabase
@@ -129,7 +167,7 @@ const MyCourses: React.FC<MyCoursesProps> = ({ studentData }) => {
         .eq('course_id', courseId)
         .order('due_date');
 
-      setAssignments(assignmentsData || []);
+      setAssignments(assignmentsData as Assignment[] || []);
 
       // Fetch submissions
       const { data: submissionsData } = await supabase
@@ -138,7 +176,7 @@ const MyCourses: React.FC<MyCoursesProps> = ({ studentData }) => {
         .eq('student_id', currentStudentId)
         .in('assignment_id', assignmentsData?.map(a => a.id) || []);
 
-      setSubmissions(submissionsData || []);
+      setSubmissions(submissionsData as Submission[] || []);
 
       // Fetch grades
       const { data: gradesData } = await supabase
@@ -148,7 +186,7 @@ const MyCourses: React.FC<MyCoursesProps> = ({ studentData }) => {
         .eq('course_id', courseId)
         .order('recorded_at', { ascending: false });
 
-      setGrades(gradesData || []);
+      setGrades(gradesData as Grade[] || []);
 
       // Fetch certificates
       const { data: certificatesData } = await supabase
@@ -157,7 +195,7 @@ const MyCourses: React.FC<MyCoursesProps> = ({ studentData }) => {
         .eq('student_id', currentStudentId)
         .eq('course_id', courseId);
 
-      setCertificates(certificatesData || []);
+      setCertificates(certificatesData as Certificate[] || []);
 
     } catch (error) {
       console.error('Error fetching course details:', error);
