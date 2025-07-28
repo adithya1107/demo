@@ -21,16 +21,35 @@ export interface APIConfig {
 // Type for valid table names
 type TableName = keyof Database['public']['Tables'];
 
-// Type for Supabase response
-type SupabaseResponse<T> = {
+// Simplified query options to avoid deep type instantiation
+export interface QueryOptions {
+  select?: string;
+  filters?: Record<string, any>;
+  order?: {
+    column: string;
+    ascending?: boolean;
+  };
+  limit?: number;
+  offset?: number;
+}
+
+// Simplified Supabase response type
+interface SupabaseResponse<T> {
   data: T | null;
   error: { message: string } | null;
-};
+}
+
+// Cache entry interface
+interface CacheEntry {
+  data: any;
+  timestamp: number;
+  ttl: number;
+}
 
 export class APIGateway {
   private static instance: APIGateway;
   private config: APIConfig;
-  private cache: Map<string, { data: any; timestamp: number; ttl: number }> = new Map();
+  private cache: Map<string, CacheEntry> = new Map();
   private requestQueue: Map<string, Promise<any>> = new Map();
 
   private constructor() {
@@ -50,11 +69,11 @@ export class APIGateway {
     return APIGateway.instance;
   }
 
-  private generateCacheKey(table: string, query: any): string {
+  private generateCacheKey(table: string, query: QueryOptions): string {
     return `${table}_${JSON.stringify(query)}`;
   }
 
-  private isValidCacheEntry(entry: { data: any; timestamp: number; ttl: number }): boolean {
+  private isValidCacheEntry(entry: CacheEntry): boolean {
     return Date.now() - entry.timestamp < entry.ttl;
   }
 
@@ -92,9 +111,39 @@ export class APIGateway {
     }
   }
 
+  private buildSelectQuery(table: TableName, query: QueryOptions): any {
+    // Use type assertion to avoid deep type instantiation
+    let queryBuilder: any = supabase.from(table).select(query.select || '*');
+
+    // Apply filters
+    if (query.filters) {
+      Object.entries(query.filters).forEach(([key, value]) => {
+        queryBuilder = queryBuilder.eq(key, value);
+      });
+    }
+
+    // Apply ordering
+    if (query.order) {
+      queryBuilder = queryBuilder.order(query.order.column, { 
+        ascending: query.order.ascending ?? true 
+      });
+    }
+
+    // Apply pagination
+    if (query.limit) {
+      queryBuilder = queryBuilder.limit(query.limit);
+    }
+
+    if (query.offset) {
+      queryBuilder = queryBuilder.range(query.offset, query.offset + (query.limit || 10) - 1);
+    }
+
+    return queryBuilder;
+  }
+
   public async select<T = any>(
     table: TableName,
-    query: any = {},
+    query: QueryOptions = {},
     useCache: boolean = true
   ): Promise<APIResponse<T[]>> {
     const startTime = performance.now();
@@ -120,50 +169,25 @@ export class APIGateway {
         return result;
       }
 
-      // Create new request - simplified to avoid deep type instantiation
+      // Create new request with simplified type handling
       const requestPromise = this.executeWithRetry(async () => {
-        let queryBuilder = supabase.from(table).select(query.select || '*');
-
-        // Apply filters
-        if (query.filters) {
-          Object.entries(query.filters).forEach(([key, value]) => {
-            queryBuilder = queryBuilder.eq(key, value);
-          });
-        }
-
-        // Apply ordering
-        if (query.order) {
-          queryBuilder = queryBuilder.order(query.order.column, { 
-            ascending: query.order.ascending ?? true 
-          });
-        }
-
-        // Apply pagination
-        if (query.limit) {
-          queryBuilder = queryBuilder.limit(query.limit);
-        }
-
-        if (query.offset) {
-          queryBuilder = queryBuilder.range(query.offset, query.offset + (query.limit || 10) - 1);
-        }
-
-        // Execute the query first, then validate the result
-        const rawResult = await queryBuilder;
+        const queryBuilder = this.buildSelectQuery(table, query);
+        const rawResult: any = await queryBuilder;
         
-        // Pass the executed result to validator instead of the query builder
+        // Pass the executed result to validator with explicit typing
         const validatedResult = await dbSecurityValidator.validateAndExecuteQuery(
           rawResult,
           'select',
           `${table}_select`
         );
 
-        return validatedResult;
+        return validatedResult as SupabaseResponse<T[]>;
       });
 
       // Store in request queue
       this.requestQueue.set(cacheKey, requestPromise);
 
-      const result = await requestPromise as SupabaseResponse<T[]>;
+      const result = await requestPromise;
       
       // Remove from queue
       this.requestQueue.delete(cacheKey);
@@ -223,37 +247,33 @@ export class APIGateway {
       const sanitizedData = dbSecurityValidator.sanitizeUserInput(data);
       
       const result = await this.executeWithRetry(async () => {
+        let queryBuilder: any = supabase.from(table).insert(sanitizedData);
+        
         let rawResult: any;
         
         if (options.returning) {
-          rawResult = await supabase
-            .from(table)
-            .insert(sanitizedData)
-            .select(options.returning);
+          rawResult = await queryBuilder.select(options.returning);
         } else {
-          rawResult = await supabase
-            .from(table)
-            .insert(sanitizedData);
+          rawResult = await queryBuilder;
         }
         
-        // Pass the executed result to validator
+        // Pass the executed result to validator with explicit typing
         const validatedResult = await dbSecurityValidator.validateAndExecuteQuery(
           rawResult,
           'insert',
           `${table}_insert`
         );
         
-        return validatedResult;
+        return validatedResult as SupabaseResponse<T>;
       });
 
       const duration = performance.now() - startTime;
-      const typedResult = result as SupabaseResponse<T>;
 
-      if (typedResult.error) {
-        await this.logAPICall('INSERT', table, duration, false, typedResult.error.message);
+      if (result.error) {
+        await this.logAPICall('INSERT', table, duration, false, result.error.message);
         return {
           data: null,
-          error: typedResult.error.message,
+          error: result.error.message,
           success: false,
           timestamp: new Date().toISOString(),
         };
@@ -265,7 +285,7 @@ export class APIGateway {
       await this.logAPICall('INSERT', table, duration, true);
 
       return {
-        data: typedResult.data,
+        data: result.data,
         error: null,
         success: true,
         timestamp: new Date().toISOString(),
@@ -296,9 +316,9 @@ export class APIGateway {
       const sanitizedData = dbSecurityValidator.sanitizeUserInput(data);
       
       const result = await this.executeWithRetry(async () => {
-        let queryBuilder = supabase.from(table).update(sanitizedData);
+        let queryBuilder: any = supabase.from(table).update(sanitizedData);
 
-        // Apply filters
+        // Apply filters with explicit typing
         Object.entries(filters).forEach(([key, value]) => {
           queryBuilder = queryBuilder.eq(key, value);
         });
@@ -311,24 +331,23 @@ export class APIGateway {
           rawResult = await queryBuilder;
         }
         
-        // Pass the executed result to validator
+        // Pass the executed result to validator with explicit typing
         const validatedResult = await dbSecurityValidator.validateAndExecuteQuery(
           rawResult,
           'update',
           `${table}_update`
         );
         
-        return validatedResult;
+        return validatedResult as SupabaseResponse<T>;
       });
 
       const duration = performance.now() - startTime;
-      const typedResult = result as SupabaseResponse<T>;
 
-      if (typedResult.error) {
-        await this.logAPICall('UPDATE', table, duration, false, typedResult.error.message);
+      if (result.error) {
+        await this.logAPICall('UPDATE', table, duration, false, result.error.message);
         return {
           data: null,
-          error: typedResult.error.message,
+          error: result.error.message,
           success: false,
           timestamp: new Date().toISOString(),
         };
@@ -340,7 +359,7 @@ export class APIGateway {
       await this.logAPICall('UPDATE', table, duration, true);
 
       return {
-        data: typedResult.data,
+        data: result.data,
         error: null,
         success: true,
         timestamp: new Date().toISOString(),
@@ -367,34 +386,33 @@ export class APIGateway {
 
     try {
       const result = await this.executeWithRetry(async () => {
-        let queryBuilder = supabase.from(table).delete();
+        let queryBuilder: any = supabase.from(table).delete();
 
-        // Apply filters
+        // Apply filters with explicit typing
         Object.entries(filters).forEach(([key, value]) => {
           queryBuilder = queryBuilder.eq(key, value);
         });
 
-        // Execute the query first
-        const rawResult = await queryBuilder;
+        // Execute the query with explicit typing
+        const rawResult: any = await queryBuilder;
         
-        // Pass the executed result to validator
+        // Pass the executed result to validator with explicit typing
         const validatedResult = await dbSecurityValidator.validateAndExecuteQuery(
           rawResult,
           'delete',
           `${table}_delete`
         );
         
-        return validatedResult;
+        return validatedResult as SupabaseResponse<T>;
       });
 
       const duration = performance.now() - startTime;
-      const typedResult = result as SupabaseResponse<T>;
 
-      if (typedResult.error) {
-        await this.logAPICall('DELETE', table, duration, false, typedResult.error.message);
+      if (result.error) {
+        await this.logAPICall('DELETE', table, duration, false, result.error.message);
         return {
           data: null,
-          error: typedResult.error.message,
+          error: result.error.message,
           success: false,
           timestamp: new Date().toISOString(),
         };
@@ -406,7 +424,7 @@ export class APIGateway {
       await this.logAPICall('DELETE', table, duration, true);
 
       return {
-        data: typedResult.data,
+        data: result.data,
         error: null,
         success: true,
         timestamp: new Date().toISOString(),
