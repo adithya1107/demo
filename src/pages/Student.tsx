@@ -15,7 +15,12 @@ import {
   Settings,
   User,
   Menu,
-  X
+  X,
+  Award,
+  BarChart3,
+  Users,
+  PlayCircle,
+  ClipboardList
 } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { toast } from '@/components/ui/use-toast';
@@ -34,6 +39,11 @@ import HostelFacility from '@/components/student/HostelFacility';
 import SupportHelp from '@/components/student/SupportHelp';
 import UserProfile from '@/components/UserProfile';
 import LoadingSkeleton from '@/components/ui/loading-skeleton';
+import StudentAcademicRecord from '@/components/sis/StudentAcademicRecord';
+import LearningManagementSystem from '@/components/lms/LearningManagementSystem';
+import TimetableManagement from '@/components/timetable/TimetableManagement';
+import ExaminationSystem from '@/components/examination/ExaminationSystem';
+import CommunicationHub from '@/components/communication/CommunicationHub';
 
 const Student = () => {
   const [activeView, setActiveView] = useState('dashboard');
@@ -140,7 +150,8 @@ const Student = () => {
       label: 'Main',
       items: [
         { id: 'dashboard', label: 'Dashboard', icon: GraduationCap, badge: studentData.notifications?.length || 0 },
-        { id: 'schedule', label: 'Schedule', icon: Clock },
+        { id: 'academic-record', label: 'Academic Record', icon: Award },
+        { id: 'timetable', label: 'Timetable', icon: Clock },
         { id: 'attendance', label: 'Attendance', icon: Calendar, badge: '95%' },
       ]
     },
@@ -149,8 +160,18 @@ const Student = () => {
       label: 'Academic',
       items: [
         { id: 'courses', label: 'Courses', icon: BookOpen, badge: 6 },
+        { id: 'lms', label: 'Learning Portal', icon: PlayCircle },
         { id: 'assignments', label: 'Assignments', icon: FileText, badge: 3 },
+        { id: 'examinations', label: 'Examinations', icon: ClipboardList },
         { id: 'events', label: 'Events', icon: Bell },
+      ]
+    },
+    {
+      id: 'communication',
+      label: 'Communication',
+      items: [
+        { id: 'communication-hub', label: 'Communication Hub', icon: MessageSquare },
+        { id: 'communication', label: 'Legacy Chat', icon: Users },
       ]
     },
     {
@@ -159,7 +180,6 @@ const Student = () => {
       collapsible: true,
       defaultExpanded: false,
       items: [
-        { id: 'communication', label: 'Communication', icon: MessageSquare },
         { id: 'hostel', label: 'Hostel', icon: Building },
         { id: 'support', label: 'Support', icon: HelpCircle },
       ]
@@ -174,16 +194,24 @@ const Student = () => {
     switch (activeView) {
       case 'dashboard':
         return <StudentDashboard studentData={studentData} />;
-      case 'schedule':
-        return <ScheduleTimetable studentData={studentData} />;
+      case 'academic-record':
+        return <StudentAcademicRecord />;
+      case 'timetable':
+        return <TimetableManagement />;
       case 'attendance':
         return <AttendanceOverview studentData={studentData} />;
       case 'courses':
         return <CoursesLearningSnapshot studentData={studentData} />;
+      case 'lms':
+        return <LearningManagementSystem />;
       case 'assignments':
         return <MyCourses studentData={studentData} />;
+      case 'examinations':
+        return <ExaminationSystem />;
       case 'events':
         return <CalendarAttendance studentData={studentData} />;
+      case 'communication-hub':
+        return <CommunicationHub />;
       case 'communication':
         return <CommunicationCenter studentData={studentData} />;
       case 'hostel':
@@ -198,11 +226,15 @@ const Student = () => {
   const getPageTitle = () => {
     const titles = {
       dashboard: 'Dashboard',
-      schedule: 'Schedule & Timetable',
+      'academic-record': 'Academic Record',
+      timetable: 'Timetable & Schedule',
       attendance: 'Attendance Overview',
       courses: 'Courses & Learning',
+      lms: 'Learning Management System',
       assignments: 'Assignments',
+      examinations: 'Examinations',
       events: 'Events & Calendar',
+      'communication-hub': 'Communication Hub',
       communication: 'Communication Center',
       hostel: 'Hostel & Facilities',
       support: 'Support & Help'
