@@ -48,33 +48,6 @@ interface Room {
   updated_at: string;
 }
 
-interface Course {
-  course_name: string;
-  course_code: string;
-}
-
-interface UserProfile {
-  first_name: string;
-  last_name: string;
-}
-
-interface TimetableSlotResponse {
-  id: string;
-  course_id: string;
-  instructor_id: string;
-  room_id: string;
-  day_of_week: number;
-  start_time: string;
-  end_time: string;
-  slot_type: string;
-  academic_year: string;
-  semester: string;
-  is_active: boolean;
-  courses: Course;
-  rooms: Room;
-  instructor: UserProfile;
-}
-
 const TimetableManagement: React.FC = () => {
   const { profile } = useUserProfile();
   const [timetableSlots, setTimetableSlots] = useState<TimetableSlot[]>([]);
@@ -100,35 +73,25 @@ const TimetableManagement: React.FC = () => {
 
   const fetchTimetableSlots = async () => {
     try {
-      // Use a more generic approach to avoid type issues
-      const { data, error } = await supabase
+      // First, get the basic timetable slots without relationships
+      const { data: slotsData, error: slotsError } = await supabase
         .from('timetable_slots' as any)
-        .select(`
-          *,
-          courses!timetable_slots_course_id_fkey (
-            course_name,
-            course_code
-          ),
-          rooms!timetable_slots_room_id_fkey (
-            room_number,
-            building,
-            floor
-          ),
-          instructor:user_profiles!timetable_slots_instructor_id_fkey (
-            first_name,
-            last_name
-          )
-        `)
+        .select('*')
         .eq('is_active', true);
 
-      if (error) {
-        console.error('Supabase error:', error);
-        throw error;
+      if (slotsError) {
+        console.error('Supabase error:', slotsError);
+        throw slotsError;
       }
 
-      let filteredData = data || [];
+      if (!slotsData || slotsData.length === 0) {
+        setTimetableSlots([]);
+        return;
+      }
 
-      // Apply filtering based on user role
+      // Apply filtering based on user role before fetching related data
+      let filteredSlotsData = slotsData;
+
       if (profile?.user_type === 'student') {
         try {
           const { data: enrollments } = await supabase
@@ -138,17 +101,47 @@ const TimetableManagement: React.FC = () => {
 
           if (enrollments && enrollments.length > 0) {
             const courseIds = enrollments.map(e => e.course_id);
-            filteredData = filteredData.filter(slot => courseIds.includes(slot.course_id));
+            filteredSlotsData = slotsData.filter(slot => courseIds.includes(slot.course_id));
+          } else {
+            filteredSlotsData = [];
           }
         } catch (enrollmentError) {
           console.error('Error fetching enrollments:', enrollmentError);
         }
       } else if (profile?.user_type === 'faculty') {
-        filteredData = filteredData.filter(slot => slot.instructor_id === profile.id);
+        filteredSlotsData = slotsData.filter(slot => slot.instructor_id === profile.id);
       }
 
+      // Now fetch related data separately
+      const courseIds = [...new Set(filteredSlotsData.map(slot => slot.course_id))];
+      const roomIds = [...new Set(filteredSlotsData.map(slot => slot.room_id))];
+      const instructorIds = [...new Set(filteredSlotsData.map(slot => slot.instructor_id))];
+
+      // Fetch courses
+      const { data: coursesData } = await supabase
+        .from('courses')
+        .select('id, course_name, course_code')
+        .in('id', courseIds);
+
+      // Fetch rooms
+      const { data: roomsData } = await supabase
+        .from('rooms' as any)
+        .select('id, room_number, building, floor')
+        .in('id', roomIds);
+
+      // Fetch instructors
+      const { data: instructorsData } = await supabase
+        .from('user_profiles')
+        .select('id, first_name, last_name')
+        .in('id', instructorIds);
+
+      // Create lookup maps
+      const coursesMap = new Map((coursesData || []).map(course => [course.id, course]));
+      const roomsMap = new Map((roomsData || []).map(room => [room.id, room]));
+      const instructorsMap = new Map((instructorsData || []).map(instructor => [instructor.id, instructor]));
+
       // Transform the data to match our interface
-      const transformedData: TimetableSlot[] = filteredData.map((slot: any) => ({
+      const transformedData: TimetableSlot[] = filteredSlotsData.map((slot: any) => ({
         id: slot.id,
         course_id: slot.course_id,
         instructor_id: slot.instructor_id,
@@ -160,9 +153,9 @@ const TimetableManagement: React.FC = () => {
         academic_year: slot.academic_year,
         semester: slot.semester,
         is_active: slot.is_active,
-        courses: slot.courses || { course_name: 'Unknown', course_code: 'N/A' },
-        rooms: slot.rooms || { room_number: 'Unknown', building: 'Unknown', floor: 0 },
-        instructor: slot.instructor || { first_name: 'Unknown', last_name: 'Instructor' }
+        courses: coursesMap.get(slot.course_id) || { course_name: 'Unknown', course_code: 'N/A' },
+        rooms: roomsMap.get(slot.room_id) || { room_number: 'Unknown', building: 'Unknown', floor: 0 },
+        instructor: instructorsMap.get(slot.instructor_id) || { first_name: 'Unknown', last_name: 'Instructor' }
       }));
 
       setTimetableSlots(transformedData);
@@ -173,6 +166,7 @@ const TimetableManagement: React.FC = () => {
         description: 'Failed to fetch timetable',
         variant: 'destructive'
       });
+      setTimetableSlots([]); // Set empty array on error
     }
   };
 
