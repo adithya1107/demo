@@ -28,7 +28,8 @@ class ApiGateway {
 
   async select(table: string, options: SelectOptions = {}): Promise<ApiResponse> {
     try {
-      let query = supabase.from(table).select('*');
+      // Use supabase directly without TypeScript strict typing for dynamic table names
+      let query = (supabase as any).from(table).select('*');
 
       // Apply filters
       if (options.filters) {
@@ -70,7 +71,7 @@ class ApiGateway {
 
   async insert(table: string, data: any): Promise<ApiResponse> {
     try {
-      const { data: result, error } = await supabase
+      const { data: result, error } = await (supabase as any)
         .from(table)
         .insert(data)
         .select()
@@ -90,7 +91,7 @@ class ApiGateway {
 
   async update(table: string, data: any, filters: Record<string, any>): Promise<ApiResponse> {
     try {
-      let query = supabase.from(table).update(data);
+      let query = (supabase as any).from(table).update(data);
 
       Object.entries(filters).forEach(([key, value]) => {
         query = query.eq(key, value);
@@ -112,7 +113,7 @@ class ApiGateway {
 
   async delete(table: string, filters: Record<string, any>): Promise<ApiResponse> {
     try {
-      let query = supabase.from(table).delete();
+      let query = (supabase as any).from(table).delete();
 
       Object.entries(filters).forEach(([key, value]) => {
         query = query.eq(key, value);

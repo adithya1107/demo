@@ -14,7 +14,7 @@ export interface UserProfile {
   is_active: boolean;
   created_at: string;
   updated_at: string;
-  hierarchy_level: 'super_admin' | 'faculty' | 'admin' | 'student' | 'parent' | 'alumni';
+  hierarchy_level: 'super_admin' | 'faculty' | 'admin' | 'student' | 'parent' | 'alumni' | 'staff';
 }
 
 export const useUserProfile = () => {
@@ -49,7 +49,7 @@ export const useUserProfile = () => {
           const profileData = response.data[0] as UserProfile;
           setProfile({
             ...profileData,
-            hierarchy_level: profileData.user_type // Set hierarchy_level to user_type by default
+            hierarchy_level: profileData.user_type === 'staff' ? 'admin' : profileData.user_type
           });
           setError(null);
         } else {
