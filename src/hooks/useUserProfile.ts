@@ -24,21 +24,33 @@ export const useUserProfile = () => {
   const [error, setError] = useState<string | null>(null);
 
   useEffect(() => {
+    let mounted = true;
+
     const fetchProfile = async () => {
       if (!user) {
-        setProfile(null);
-        setLoading(false);
+        if (mounted) {
+          setProfile(null);
+          setLoading(false);
+          setError(null);
+        }
         return;
       }
 
       try {
+        setError(null);
         const response = await apiGateway.select('user_profiles', {
           filters: { id: user.id },
           limit: 1
         });
 
+        if (!mounted) return;
+
         if (response.success && response.data && response.data.length > 0) {
-          setProfile(response.data[0] as UserProfile);
+          const profileData = response.data[0] as UserProfile;
+          setProfile({
+            ...profileData,
+            hierarchy_level: profileData.user_type // Set hierarchy_level to user_type by default
+          });
           setError(null);
         } else {
           setError('Profile not found');
@@ -46,16 +58,24 @@ export const useUserProfile = () => {
         }
       } catch (err) {
         console.error('Error in fetchProfile:', err);
-        setError('Failed to fetch profile');
-        setProfile(null);
+        if (mounted) {
+          setError('Failed to fetch profile');
+          setProfile(null);
+        }
       } finally {
-        setLoading(false);
+        if (mounted) {
+          setLoading(false);
+        }
       }
     };
 
     if (!authLoading) {
       fetchProfile();
     }
+
+    return () => {
+      mounted = false;
+    };
   }, [user, authLoading]);
 
   const updateProfile = async (updates: Partial<UserProfile>) => {

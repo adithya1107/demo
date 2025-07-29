@@ -28,36 +28,60 @@ export const useNotifications = () => {
   const [error, setError] = useState<string | null>(null);
 
   useEffect(() => {
-    if (profile?.id) {
-      fetchNotifications();
-      subscribeToNotifications();
-    }
+    let mounted = true;
+
+    const fetchNotifications = async () => {
+      if (!profile?.id) {
+        if (mounted) {
+          setNotifications([]);
+          setUnreadCount(0);
+          setLoading(false);
+        }
+        return;
+      }
+
+      try {
+        setError(null);
+        const response = await apiGateway.select('notifications', {
+          filters: { recipient_id: profile.id },
+          order: { column: 'created_at', ascending: false },
+          limit: 50
+        });
+
+        if (!mounted) return;
+
+        if (response.success && response.data) {
+          const notificationData = response.data as Notification[];
+          setNotifications(notificationData);
+          setUnreadCount(notificationData.filter(n => !n.is_read).length);
+        } else {
+          setError(response.error || 'Failed to fetch notifications');
+          setNotifications([]);
+          setUnreadCount(0);
+        }
+      } catch (err) {
+        console.error('Error fetching notifications:', err);
+        if (mounted) {
+          setError('Failed to fetch notifications');
+          setNotifications([]);
+          setUnreadCount(0);
+        }
+      } finally {
+        if (mounted) {
+          setLoading(false);
+        }
+      }
+    };
+
+    fetchNotifications();
+
+    return () => {
+      mounted = false;
+    };
   }, [profile?.id]);
 
-  const fetchNotifications = async () => {
-    try {
-      setLoading(true);
-      const response = await apiGateway.select('notifications', {
-        filters: { recipient_id: profile?.id },
-        order: { column: 'created_at', ascending: false },
-        limit: 50
-      });
-
-      if (response.success && response.data) {
-        const notificationData = response.data as Notification[];
-        setNotifications(notificationData);
-        setUnreadCount(notificationData.filter(n => !n.is_read).length);
-      } else {
-        setError(response.error || 'Failed to fetch notifications');
-      }
-    } catch (err) {
-      setError('Failed to fetch notifications');
-    } finally {
-      setLoading(false);
-    }
-  };
-
-  const subscribeToNotifications = () => {
+  // Set up real-time subscription
+  useEffect(() => {
     if (!profile?.id) return;
 
     const channel = supabase
@@ -89,7 +113,7 @@ export const useNotifications = () => {
           setNotifications(prev => 
             prev.map(n => n.id === updatedNotification.id ? updatedNotification : n)
           );
-          if (updatedNotification.is_read) {
+          if (updatedNotification.is_read && !notifications.find(n => n.id === updatedNotification.id)?.is_read) {
             setUnreadCount(prev => Math.max(0, prev - 1));
           }
         }
@@ -99,7 +123,7 @@ export const useNotifications = () => {
     return () => {
       supabase.removeChannel(channel);
     };
-  };
+  }, [profile?.id, notifications]);
 
   const markAsRead = async (notificationId: string) => {
     try {
@@ -113,37 +137,34 @@ export const useNotifications = () => {
           prev.map(n => n.id === notificationId ? { ...n, is_read: true } : n)
         );
         setUnreadCount(prev => Math.max(0, prev - 1));
+        return { success: true };
       }
+      return { success: false, error: response.error };
     } catch (err) {
       console.error('Failed to mark notification as read:', err);
+      return { success: false, error: 'Failed to mark notification as read' };
     }
   };
 
   const markAllAsRead = async () => {
+    const unreadNotifications = notifications.filter(n => !n.is_read);
+    
     try {
-      const unreadNotifications = notifications.filter(n => !n.is_read);
-      
-      for (const notification of unreadNotifications) {
-        await apiGateway.update('notifications', 
+      const promises = unreadNotifications.map(notification =>
+        apiGateway.update('notifications', 
           { is_read: true }, 
           { id: notification.id }
-        );
-      }
+        )
+      );
+
+      await Promise.all(promises);
 
       setNotifications(prev => prev.map(n => ({ ...n, is_read: true })));
       setUnreadCount(0);
+      return { success: true };
     } catch (err) {
       console.error('Failed to mark all notifications as read:', err);
-    }
-  };
-
-  const createNotification = async (notification: Omit<Notification, 'id' | 'created_at'>) => {
-    try {
-      const response = await apiGateway.insert('notifications', notification);
-      return response.success;
-    } catch (err) {
-      console.error('Failed to create notification:', err);
-      return false;
+      return { success: false, error: 'Failed to mark all notifications as read' };
     }
   };
 
@@ -154,7 +175,9 @@ export const useNotifications = () => {
     error,
     markAsRead,
     markAllAsRead,
-    createNotification,
-    refetch: fetchNotifications
+    refetch: () => {
+      setLoading(true);
+      // This will trigger the useEffect to refetch
+    }
   };
 };

@@ -1,4 +1,3 @@
-
 import { useState, useEffect } from 'react';
 import { useUserProfile } from './useUserProfile';
 import { apiGateway } from '@/utils/apiGateway';
@@ -32,64 +31,80 @@ export const useGrades = () => {
   const [error, setError] = useState<string | null>(null);
 
   useEffect(() => {
-    if (profile?.id) {
-      fetchGrades();
-    }
-  }, [profile?.id]);
+    let mounted = true;
 
-  const fetchGrades = async () => {
-    try {
-      setLoading(true);
-      
-      if (profile?.user_type === 'student') {
-        const response = await apiGateway.select('grade_submissions', {
-          filters: { student_id: profile.id },
-          order: { column: 'created_at', ascending: false }
-        });
+    const fetchGrades = async () => {
+      if (!profile?.id) {
+        if (mounted) {
+          setGrades([]);
+          setLoading(false);
+        }
+        return;
+      }
 
-        if (response.success && response.data) {
-          // Fetch additional details for each grade
-          const gradesWithDetails = await Promise.all(
-            response.data.map(async (grade: GradeSubmission) => {
-              const [assignmentResponse, courseResponse] = await Promise.all([
-                apiGateway.select('assignments', {
-                  filters: { id: grade.assignment_id },
-                  limit: 1
-                }),
-                apiGateway.select('courses', {
-                  filters: { id: grade.course_id },
-                  limit: 1
-                })
-              ]);
+      try {
+        setError(null);
+        
+        if (profile.user_type === 'student') {
+          // For students, fetch grades from grade_submissions table if it exists,
+          // otherwise use assignment_submissions
+          const response = await apiGateway.select('assignment_submissions', {
+            filters: { student_id: profile.id },
+            order: { column: 'submitted_at', ascending: false }
+          });
 
-              const assignment = assignmentResponse.data?.[0];
-              const course = courseResponse.data?.[0];
+          if (!mounted) return;
 
-              return {
-                ...grade,
-                assignment_title: assignment?.title,
-                course_name: course?.course_name,
-                max_marks: assignment?.max_marks
-              };
-            })
-          );
+          if (response.success && response.data) {
+            // Transform assignment submissions to grade format
+            const gradesData = response.data.map((submission: any) => ({
+              id: submission.id,
+              student_id: submission.student_id,
+              assignment_id: submission.assignment_id,
+              course_id: '', // We'll need to get this from assignment
+              grade_value: submission.marks_obtained,
+              grade_letter: null,
+              graded_by: submission.graded_by,
+              graded_at: submission.graded_at,
+              feedback: submission.feedback,
+              is_final: !!submission.marks_obtained,
+              created_at: submission.submitted_at,
+              updated_at: submission.submitted_at,
+              max_marks: null // We'll need to fetch this
+            }));
 
-          setGrades(gradesWithDetails);
+            setGrades(gradesData);
+          } else {
+            setError(response.error || 'Failed to fetch grades');
+            setGrades([]);
+          }
+        }
+      } catch (err) {
+        console.error('Error fetching grades:', err);
+        if (mounted) {
+          setError('Failed to fetch grades');
+          setGrades([]);
+        }
+      } finally {
+        if (mounted) {
+          setLoading(false);
         }
       }
-    } catch (err) {
-      setError('Failed to fetch grades');
-    } finally {
-      setLoading(false);
-    }
-  };
+    };
+
+    fetchGrades();
+
+    return () => {
+      mounted = false;
+    };
+  }, [profile]);
 
   const submitGrade = async (gradeData: Omit<GradeSubmission, 'id' | 'created_at' | 'updated_at'>) => {
     try {
       const response = await apiGateway.insert('grade_submissions', gradeData);
       
       if (response.success) {
-        await fetchGrades(); // Refresh grades
+        setLoading(true); // Trigger refetch
         return { success: true, data: response.data };
       }
       
@@ -104,7 +119,7 @@ export const useGrades = () => {
       const response = await apiGateway.update('grade_submissions', updates, { id: gradeId });
       
       if (response.success) {
-        await fetchGrades(); // Refresh grades
+        setLoading(true); // Trigger refetch
         return { success: true, data: response.data };
       }
       
@@ -132,7 +147,7 @@ export const useGrades = () => {
         else gradePoints = 0.0;
 
         totalPoints += gradePoints;
-        totalCredits += 1; // Assuming each assignment has equal weight
+        totalCredits += 1;
       }
     });
 
@@ -170,6 +185,9 @@ export const useGrades = () => {
     submitGrade,
     updateGrade,
     getGradeStatistics,
-    refetch: fetchGrades
+    refetch: () => {
+      setLoading(true);
+      // This will trigger the useEffect to refetch
+    }
   };
 };

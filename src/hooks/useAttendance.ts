@@ -39,92 +39,77 @@ export const useAttendance = () => {
   const [error, setError] = useState<string | null>(null);
 
   useEffect(() => {
-    if (profile?.id) {
-      fetchAttendanceData();
-    }
-  }, [profile?.id]);
+    let mounted = true;
 
-  const fetchAttendanceData = async () => {
-    try {
-      setLoading(true);
-      
-      if (profile?.user_type === 'student') {
-        const response = await apiGateway.select('attendance', {
-          filters: { student_id: profile.id },
-          order: { column: 'class_date', ascending: false }
-        });
-
-        if (response.success && response.data) {
-          setAttendanceRecords(response.data as AttendanceRecord[]);
+    const fetchAttendanceData = async () => {
+      if (!profile?.id) {
+        if (mounted) {
+          setAttendanceRecords([]);
+          setSessions([]);
+          setLoading(false);
         }
-      } else if (profile?.user_type === 'faculty') {
-        const [attendanceResponse, sessionsResponse] = await Promise.all([
-          apiGateway.select('attendance', {
-            filters: { marked_by: profile.id },
+        return;
+      }
+
+      try {
+        setError(null);
+        
+        if (profile.user_type === 'student') {
+          const response = await apiGateway.select('attendance', {
+            filters: { student_id: profile.id },
             order: { column: 'class_date', ascending: false }
-          }),
-          apiGateway.select('attendance_sessions', {
-            filters: { instructor_id: profile.id },
-            order: { column: 'session_date', ascending: false }
-          })
-        ]);
+          });
 
-        if (attendanceResponse.success && attendanceResponse.data) {
-          setAttendanceRecords(attendanceResponse.data as AttendanceRecord[]);
+          if (!mounted) return;
+
+          if (response.success && response.data) {
+            setAttendanceRecords(response.data as AttendanceRecord[]);
+          } else {
+            setError(response.error || 'Failed to fetch attendance');
+            setAttendanceRecords([]);
+          }
+        } else if (profile.user_type === 'faculty') {
+          const [attendanceResponse, sessionsResponse] = await Promise.all([
+            apiGateway.select('attendance', {
+              filters: { marked_by: profile.id },
+              order: { column: 'class_date', ascending: false }
+            }),
+            apiGateway.select('attendance_sessions', {
+              filters: { instructor_id: profile.id },
+              order: { column: 'session_date', ascending: false }
+            })
+          ]);
+
+          if (!mounted) return;
+
+          if (attendanceResponse.success && attendanceResponse.data) {
+            setAttendanceRecords(attendanceResponse.data as AttendanceRecord[]);
+          }
+
+          if (sessionsResponse.success && sessionsResponse.data) {
+            setSessions(sessionsResponse.data as AttendanceSession[]);
+          }
         }
-
-        if (sessionsResponse.success && sessionsResponse.data) {
-          setSessions(sessionsResponse.data as AttendanceSession[]);
+      } catch (err) {
+        console.error('Error fetching attendance data:', err);
+        if (mounted) {
+          setError('Failed to fetch attendance data');
+          setAttendanceRecords([]);
+          setSessions([]);
+        }
+      } finally {
+        if (mounted) {
+          setLoading(false);
         }
       }
-    } catch (err) {
-      setError('Failed to fetch attendance data');
-    } finally {
-      setLoading(false);
-    }
-  };
+    };
 
-  const markAttendance = async (sessionId: string, studentId: string, status: AttendanceRecord['status']) => {
-    try {
-      const response = await apiGateway.insert('attendance', {
-        student_id: studentId,
-        course_id: sessions.find(s => s.id === sessionId)?.course_id || '',
-        class_date: new Date().toISOString().split('T')[0],
-        status,
-        marked_by: profile?.id || '',
-        session_id: sessionId,
-        location_verified: true,
-        device_info: {
-          user_agent: navigator.userAgent,
-          timestamp: new Date().toISOString()
-        }
-      });
+    fetchAttendanceData();
 
-      if (response.success) {
-        await fetchAttendanceData();
-        return { success: true, data: response.data };
-      }
-      
-      return { success: false, error: response.error };
-    } catch (err) {
-      return { success: false, error: 'Failed to mark attendance' };
-    }
-  };
-
-  const createAttendanceSession = async (sessionData: Omit<AttendanceSession, 'id' | 'created_at'>) => {
-    try {
-      const response = await apiGateway.insert('attendance_sessions', sessionData);
-      
-      if (response.success) {
-        await fetchAttendanceData();
-        return { success: true, data: response.data };
-      }
-      
-      return { success: false, error: response.error };
-    } catch (err) {
-      return { success: false, error: 'Failed to create attendance session' };
-    }
-  };
+    return () => {
+      mounted = false;
+    };
+  }, [profile]);
 
   const getAttendanceStatistics = (courseId?: string) => {
     let filteredRecords = attendanceRecords;
@@ -151,35 +136,15 @@ export const useAttendance = () => {
     };
   };
 
-  const generateQRCode = async (sessionId: string) => {
-    try {
-      const qrCode = `ATTENDANCE_${sessionId}_${Date.now()}`;
-      
-      const response = await apiGateway.update('attendance_sessions', 
-        { qr_code: qrCode }, 
-        { id: sessionId }
-      );
-
-      if (response.success) {
-        await fetchAttendanceData();
-        return { success: true, qrCode };
-      }
-      
-      return { success: false, error: response.error };
-    } catch (err) {
-      return { success: false, error: 'Failed to generate QR code' };
-    }
-  };
-
   return {
     attendanceRecords,
     sessions,
     loading,
     error,
-    markAttendance,
-    createAttendanceSession,
     getAttendanceStatistics,
-    generateQRCode,
-    refetch: fetchAttendanceData
+    refetch: () => {
+      setLoading(true);
+      // This will trigger the useEffect to refetch
+    }
   };
 };

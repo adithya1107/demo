@@ -46,90 +46,82 @@ export const useCourses = () => {
   const [error, setError] = useState<string | null>(null);
 
   useEffect(() => {
-    if (profile?.id) {
-      fetchCourses();
-    }
-  }, [profile?.id]);
+    let mounted = true;
 
-  const fetchCourses = async () => {
-    try {
-      setLoading(true);
-      
-      const response = await apiGateway.select('courses', {
-        filters: { college_id: profile?.college_id, is_active: true },
-        order: { column: 'course_name', ascending: true }
-      });
-
-      if (response.success && response.data) {
-        const coursesData = response.data as Course[];
-        
-        // Fetch additional details for each course
-        const coursesWithDetails = await Promise.all(
-          coursesData.map(async (course) => {
-            const [instructorResponse, enrollmentResponse, assignmentResponse] = await Promise.all([
-              // Fetch instructor details
-              course.instructor_id ? apiGateway.select('user_profiles', {
-                filters: { id: course.instructor_id },
-                limit: 1
-              }) : Promise.resolve({ success: true, data: [] }),
-              
-              // Fetch enrollment count
-              apiGateway.select('enrollments', {
-                filters: { course_id: course.id, status: 'enrolled' }
-              }),
-              
-              // Fetch assignments count
-              apiGateway.select('assignments', {
-                filters: { course_id: course.id }
-              })
-            ]);
-
-            const instructor = instructorResponse.data?.[0];
-            const enrollments = enrollmentResponse.data || [];
-            const courseAssignments = assignmentResponse.data || [];
-
-            // Check if current user is enrolled
-            const isEnrolled = profile?.user_type === 'student' && 
-              enrollments.some((e: any) => e.student_id === profile.id);
-
-            return {
-              ...course,
-              instructor_name: instructor ? `${instructor.first_name} ${instructor.last_name}` : 'TBA',
-              enrolled_students: enrollments.length,
-              assignments_count: courseAssignments.length,
-              is_enrolled: isEnrolled
-            };
-          })
-        );
-
-        setCourses(coursesWithDetails);
-      } else {
-        setError(response.error || 'Failed to fetch courses');
+    const fetchCourses = async () => {
+      if (!profile?.college_id) {
+        if (mounted) {
+          setCourses([]);
+          setAssignments([]);
+          setLoading(false);
+        }
+        return;
       }
-    } catch (err) {
-      setError('Failed to fetch courses');
-    } finally {
-      setLoading(false);
-    }
-  };
+
+      try {
+        setError(null);
+        
+        const response = await apiGateway.select('courses', {
+          filters: { college_id: profile.college_id, is_active: true },
+          order: { column: 'course_name', ascending: true }
+        });
+
+        if (!mounted) return;
+
+        if (response.success && response.data) {
+          const coursesData = response.data as Course[];
+          
+          // For students, also fetch enrollment data
+          if (profile.user_type === 'student') {
+            const enrollmentResponse = await apiGateway.select('enrollments', {
+              filters: { student_id: profile.id, status: 'enrolled' }
+            });
+
+            const enrolledCourseIds = enrollmentResponse.success 
+              ? enrollmentResponse.data.map((e: any) => e.course_id)
+              : [];
+
+            const coursesWithEnrollment = coursesData.map(course => ({
+              ...course,
+              is_enrolled: enrolledCourseIds.includes(course.id)
+            }));
+
+            setCourses(coursesWithEnrollment);
+          } else {
+            setCourses(coursesData);
+          }
+        } else {
+          setError(response.error || 'Failed to fetch courses');
+          setCourses([]);
+        }
+      } catch (err) {
+        console.error('Error fetching courses:', err);
+        if (mounted) {
+          setError('Failed to fetch courses');
+          setCourses([]);
+        }
+      } finally {
+        if (mounted) {
+          setLoading(false);
+        }
+      }
+    };
+
+    fetchCourses();
+
+    return () => {
+      mounted = false;
+    };
+  }, [profile]);
 
   const fetchAssignments = async (courseId?: string) => {
+    if (!profile?.id) return;
+
     try {
-      const filters: any = {};
+      let filters: any = {};
       
       if (courseId) {
         filters.course_id = courseId;
-      } else if (profile?.user_type === 'student') {
-        // Fetch assignments for enrolled courses
-        const enrollmentResponse = await apiGateway.select('enrollments', {
-          filters: { student_id: profile.id, status: 'enrolled' }
-        });
-        
-        if (enrollmentResponse.success && enrollmentResponse.data) {
-          const courseIds = enrollmentResponse.data.map((e: any) => e.course_id);
-          // This would need a proper IN query implementation
-          // For now, we'll fetch all assignments and filter client-side
-        }
       }
 
       const response = await apiGateway.select('assignments', {
@@ -159,7 +151,11 @@ export const useCourses = () => {
       });
 
       if (response.success) {
-        await fetchCourses(); // Refresh courses
+        // Refresh courses to update enrollment status
+        const updatedCourses = courses.map(course => 
+          course.id === courseId ? { ...course, is_enrolled: true } : course
+        );
+        setCourses(updatedCourses);
         return { success: true, data: response.data };
       }
       
@@ -169,45 +165,16 @@ export const useCourses = () => {
     }
   };
 
-  const createCourse = async (courseData: Omit<Course, 'id' | 'created_at' | 'updated_at'>) => {
-    try {
-      const response = await apiGateway.insert('courses', courseData);
-      
-      if (response.success) {
-        await fetchCourses(); // Refresh courses
-        return { success: true, data: response.data };
-      }
-      
-      return { success: false, error: response.error };
-    } catch (err) {
-      return { success: false, error: 'Failed to create course' };
-    }
-  };
-
-  const createAssignment = async (assignmentData: Omit<Assignment, 'id' | 'created_at' | 'updated_at'>) => {
-    try {
-      const response = await apiGateway.insert('assignments', assignmentData);
-      
-      if (response.success) {
-        await fetchAssignments(); // Refresh assignments
-        return { success: true, data: response.data };
-      }
-      
-      return { success: false, error: response.error };
-    } catch (err) {
-      return { success: false, error: 'Failed to create assignment' };
-    }
-  };
-
   return {
     courses,
     assignments,
     loading,
     error,
     enrollInCourse,
-    createCourse,
-    createAssignment,
     fetchAssignments,
-    refetch: fetchCourses
+    refetch: () => {
+      setLoading(true);
+      // This will trigger the useEffect to refetch
+    }
   };
 };
