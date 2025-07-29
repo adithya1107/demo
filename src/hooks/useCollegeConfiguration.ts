@@ -56,25 +56,46 @@ export const useCollegeConfiguration = () => {
 
   useEffect(() => {
     if (configuration) {
-      // Transform system settings to college configuration
+      // Transform system settings to college configuration with proper type mapping
       const config: CollegeConfiguration = {
         id: configuration.college_code,
         name: configuration.college_name,
         code: configuration.college_code,
-        theme: configuration.theme,
-        branding: configuration.custom_branding,
-        enabledBlocks: configuration.enabled_modules,
+        theme: {
+          primaryColor: configuration.theme?.primary_color || '#3B82F6',
+          secondaryColor: configuration.theme?.secondary_color || '#64748B',
+          accentColor: configuration.theme?.accent_color || '#F59E0B',
+          logoUrl: configuration.theme?.logo_url || '',
+          faviconUrl: configuration.theme?.favicon_url || '',
+          fontFamily: configuration.theme?.font_family || 'Inter',
+          customCSS: configuration.theme?.custom_css || ''
+        },
+        branding: {
+          headerLogo: configuration.custom_branding?.header_logo || '',
+          loginBackground: configuration.custom_branding?.login_background || '',
+          footerText: configuration.custom_branding?.footer_text || '',
+          welcomeMessage: configuration.custom_branding?.welcome_message || 'Welcome to ColCord'
+        },
+        enabledBlocks: configuration.enabled_modules || [],
         pageLayouts: [], // Will be loaded from system settings
         modules: {
-          academic: configuration.enabled_modules.includes('academic'),
-          communication: configuration.enabled_modules.includes('communication'),
-          finance: configuration.enabled_modules.includes('finance'),
-          campusLife: configuration.enabled_modules.includes('campus-life'),
-          alumni: configuration.enabled_modules.includes('alumni'),
-          hostel: configuration.enabled_modules.includes('hostel'),
-          marketplace: configuration.enabled_modules.includes('marketplace')
+          academic: configuration.enabled_modules?.includes('academic') || false,
+          communication: configuration.enabled_modules?.includes('communication') || false,
+          finance: configuration.enabled_modules?.includes('finance') || false,
+          campusLife: configuration.enabled_modules?.includes('campus-life') || false,
+          alumni: configuration.enabled_modules?.includes('alumni') || false,
+          hostel: configuration.enabled_modules?.includes('hostel') || false,
+          marketplace: configuration.enabled_modules?.includes('marketplace') || false
         },
-        features: configuration.feature_flags,
+        features: {
+          qrAttendance: configuration.feature_flags?.qr_attendance || false,
+          mobileApp: configuration.feature_flags?.mobile_app || false,
+          parentPortal: configuration.feature_flags?.parent_portal || false,
+          alumniNetwork: configuration.feature_flags?.alumni_network || false,
+          certificateGeneration: configuration.feature_flags?.certificate_generation || false,
+          bulkOperations: configuration.feature_flags?.bulk_operations || false,
+          advancedReporting: configuration.feature_flags?.advanced_reporting || false
+        },
         customizations: {
           dashboardLayout: 'grid',
           navigationStyle: 'sidebar',

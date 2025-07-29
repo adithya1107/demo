@@ -35,8 +35,11 @@ export const BlockRenderer: React.FC<BlockRendererProps> = ({
     );
   }
 
+  // Convert permissions object to array of permission keys where value is true
+  const userPermissions = Object.keys(permissions).filter(key => permissions[key as keyof typeof permissions]);
+
   // Check permissions
-  if (!registry.validateBlockPermissions(instance.blockId, permissions)) {
+  if (!registry.validateBlockPermissions(instance.blockId, userPermissions)) {
     return null;
   }
 

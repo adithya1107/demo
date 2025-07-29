@@ -5,7 +5,7 @@ import { Toaster } from '@/components/ui/toaster';
 import { ThemeProvider } from '@/contexts/ThemeContext';
 import { WhiteLabelProvider } from '@/providers/WhiteLabelProvider';
 import { SecurityProvider } from '@/components/SecurityProvider';
-import { SessionTimeout } from '@/components/SessionTimeout';
+import SessionTimeout from '@/components/SessionTimeout';
 import NavigationWrapper from '@/components/NavigationWrapper';
 import './App.css';
 
@@ -27,7 +27,9 @@ function App() {
           <SecurityProvider>
             <BrowserRouter>
               <SessionTimeout />
-              <NavigationWrapper />
+              <NavigationWrapper>
+                <div></div>
+              </NavigationWrapper>
               <Toaster />
             </BrowserRouter>
           </SecurityProvider>
