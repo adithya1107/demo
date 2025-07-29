@@ -79,31 +79,7 @@ export const LoginCredentials: React.FC<LoginCredentialsProps> = ({
         });
 
         if (authError) {
-          // If user doesn't exist in auth, create them
-          if (authError.message.includes('Invalid login credentials')) {
-            const { data: signUpData, error: signUpError } = await supabase.auth.signUp({
-              email: email,
-              password: password,
-              options: {
-                data: {
-                  user_code: sanitizedUserCode,
-                  college_id: userProfile.college_id,
-                  user_type: userProfile.user_type,
-                  first_name: userProfile.first_name,
-                  last_name: userProfile.last_name,
-                }
-              }
-            });
-
-            if (signUpError) throw signUpError;
-            
-            if (signUpData.user) {
-              onLogin(userProfile);
-              return;
-            }
-          } else {
-            throw authError;
-          }
+          throw authError;
         }
 
         if (authData.user) {

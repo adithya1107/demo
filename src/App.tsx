@@ -7,6 +7,7 @@ import { WhiteLabelProvider } from '@/providers/WhiteLabelProvider';
 import { SecurityProvider } from '@/components/SecurityProvider';
 import SessionTimeout from '@/components/SessionTimeout';
 import NavigationWrapper from '@/components/NavigationWrapper';
+import ErrorBoundary from '@/components/ErrorBoundary';
 import Index from '@/pages/Index';
 import Student from '@/pages/Student';
 import Teacher from '@/pages/Teacher';
@@ -28,29 +29,31 @@ const queryClient = new QueryClient({
 
 function App() {
   return (
-    <QueryClientProvider client={queryClient}>
-      <ThemeProvider>
-        <WhiteLabelProvider>
-          <SecurityProvider>
-            <BrowserRouter>
-              <SessionTimeout />
-              <NavigationWrapper>
-                <Routes>
-                  <Route path="/" element={<Index />} />
-                  <Route path="/student" element={<Student />} />
-                  <Route path="/faculty" element={<Teacher />} />
-                  <Route path="/admin" element={<Admin />} />
-                  <Route path="/parent" element={<Parent />} />
-                  <Route path="/alumni" element={<Alumni />} />
-                  <Route path="*" element={<NotFound />} />
-                </Routes>
-              </NavigationWrapper>
-              <Toaster />
-            </BrowserRouter>
-          </SecurityProvider>
-        </WhiteLabelProvider>
-      </ThemeProvider>
-    </QueryClientProvider>
+    <ErrorBoundary>
+      <QueryClientProvider client={queryClient}>
+        <ThemeProvider>
+          <WhiteLabelProvider>
+            <SecurityProvider>
+              <BrowserRouter>
+                <SessionTimeout />
+                <NavigationWrapper>
+                  <Routes>
+                    <Route path="/" element={<Index />} />
+                    <Route path="/student" element={<Student />} />
+                    <Route path="/faculty" element={<Teacher />} />
+                    <Route path="/admin" element={<Admin />} />
+                    <Route path="/parent" element={<Parent />} />
+                    <Route path="/alumni" element={<Alumni />} />
+                    <Route path="*" element={<NotFound />} />
+                  </Routes>
+                </NavigationWrapper>
+                <Toaster />
+              </BrowserRouter>
+            </SecurityProvider>
+          </WhiteLabelProvider>
+        </ThemeProvider>
+      </QueryClientProvider>
+    </ErrorBoundary>
   );
 }
 

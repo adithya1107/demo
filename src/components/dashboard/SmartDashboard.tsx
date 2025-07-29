@@ -424,10 +424,10 @@ const SmartDashboard = () => {
       {/* Welcome Header */}
       <div className="flex items-center justify-between">
         <div>
-          <h1 className="text-3xl font-bold text-gray-900">
+          <h1 className="text-3xl font-bold text-foreground">
             Good {new Date().getHours() < 12 ? 'Morning' : new Date().getHours() < 17 ? 'Afternoon' : 'Evening'}, {profile?.first_name}!
           </h1>
-          <p className="text-gray-600">
+          <p className="text-muted-foreground">
             {userType === 'student' && 'Ready to learn something new today?'}
             {userType === 'faculty' && 'Your students are waiting for your guidance.'}
             {userType === 'admin' && 'Everything is running smoothly.'}
@@ -495,17 +495,17 @@ const SmartDashboard = () => {
                     dashboardData.upcomingEvents.map((event) => (
                       <div key={event.id} className="flex items-start space-x-3">
                         <div className="w-2 h-2 bg-blue-500 rounded-full mt-2"></div>
-                        <div className="flex-1">
-                          <p className="font-medium">{event.event_name}</p>
-                          <p className="text-sm text-gray-600">{event.location}</p>
-                          <p className="text-xs text-gray-400">
-                            {new Date(event.start_date).toLocaleDateString()}
-                          </p>
+                         <div className="flex-1">
+                           <p className="font-medium text-foreground">{event.event_name}</p>
+                           <p className="text-sm text-muted-foreground">{event.location}</p>
+                           <p className="text-xs text-muted-foreground">
+                             {new Date(event.start_date).toLocaleDateString()}
+                           </p>
                         </div>
                       </div>
                     ))
                   ) : (
-                    <p className="text-gray-500 text-center py-4">No upcoming events</p>
+                    <p className="text-muted-foreground text-center py-4">No upcoming events</p>
                   )}
                 </div>
               </CardContent>
@@ -525,12 +525,12 @@ const SmartDashboard = () => {
                         notification.priority === 'high' ? 'bg-red-500' :
                         notification.priority === 'medium' ? 'bg-yellow-500' : 'bg-blue-500'
                       }`}></div>
-                      <div className="flex-1">
-                        <p className="font-medium">{notification.title}</p>
-                        <p className="text-sm text-gray-600">{notification.message}</p>
-                        <p className="text-xs text-gray-400">
-                          {new Date(notification.timestamp).toLocaleTimeString()}
-                        </p>
+                       <div className="flex-1">
+                         <p className="font-medium text-foreground">{notification.title}</p>
+                         <p className="text-sm text-muted-foreground">{notification.message}</p>
+                         <p className="text-xs text-muted-foreground">
+                           {new Date(notification.timestamp).toLocaleTimeString()}
+                         </p>
                       </div>
                     </div>
                   ))}

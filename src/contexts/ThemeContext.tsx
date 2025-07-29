@@ -48,22 +48,22 @@ export const ThemeProvider = ({ children }: ThemeProviderProps) => {
     if (theme === 'light') {
       // Light mode overrides
       root.style.setProperty('--background', '0 0% 100%');
-      root.style.setProperty('--foreground', '0 0% 0%');
-      root.style.setProperty('--card', '0 0% 0% / 0.05');
-      root.style.setProperty('--card-foreground', '0 0% 0%');
+      root.style.setProperty('--foreground', '0 0% 3%');
+      root.style.setProperty('--card', '0 0% 100%');
+      root.style.setProperty('--card-foreground', '0 0% 3%');
       root.style.setProperty('--popover', '0 0% 100%');
-      root.style.setProperty('--popover-foreground', '0 0% 0%');
-      root.style.setProperty('--primary', '0 0% 0%');
-      root.style.setProperty('--primary-foreground', '0 0% 100%');
-      root.style.setProperty('--secondary', '0 0% 0% / 0.1');
-      root.style.setProperty('--secondary-foreground', '0 0% 0%');
-      root.style.setProperty('--muted', '0 0% 0% / 0.05');
-      root.style.setProperty('--muted-foreground', '0 0% 0% / 0.6');
-      root.style.setProperty('--accent', '0 0% 0% / 0.1');
-      root.style.setProperty('--accent-foreground', '0 0% 0%');
-      root.style.setProperty('--border', '0 0% 0% / 0.1');
-      root.style.setProperty('--input', '0 0% 0% / 0.05');
-      root.style.setProperty('--ring', '0 0% 0% / 0.4');
+      root.style.setProperty('--popover-foreground', '0 0% 3%');
+      root.style.setProperty('--primary', '0 0% 9%');
+      root.style.setProperty('--primary-foreground', '0 0% 98%');
+      root.style.setProperty('--secondary', '0 0% 96%');
+      root.style.setProperty('--secondary-foreground', '0 0% 9%');
+      root.style.setProperty('--muted', '0 0% 96%');
+      root.style.setProperty('--muted-foreground', '0 0% 45%');
+      root.style.setProperty('--accent', '0 0% 96%');
+      root.style.setProperty('--accent-foreground', '0 0% 9%');
+      root.style.setProperty('--border', '0 0% 89%');
+      root.style.setProperty('--input', '0 0% 89%');
+      root.style.setProperty('--ring', '0 0% 3%');
       root.style.setProperty('--sidebar-background', '0 0% 100%');
       root.style.setProperty('--sidebar-foreground', '0 0% 0% / 0.6');
       root.style.setProperty('--sidebar-primary', '0 0% 0%');
