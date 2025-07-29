@@ -1,4 +1,3 @@
-
 import { useState, useEffect } from 'react';
 import { useSystemSettings } from './useSystemSettings';
 import { BlockInstance, PageLayout } from '@/lib/blocks/BlockRegistry';
@@ -74,7 +73,8 @@ export const useCollegeConfiguration = () => {
           headerLogo: configuration.custom_branding?.header_logo || '',
           loginBackground: configuration.custom_branding?.login_background || '',
           footerText: configuration.custom_branding?.footer_text || '',
-          welcomeMessage: configuration.custom_branding?.welcome_message || 'Welcome to ColCord'
+          // Safely use a default (since welcome_message doesn't exist in the incoming type)
+          welcomeMessage: 'Welcome to ColCord'
         },
         enabledBlocks: configuration.enabled_modules || [],
         pageLayouts: [], // Will be loaded from system settings
@@ -120,7 +120,6 @@ export const useCollegeConfiguration = () => {
     const promises = Object.entries(branding).map(([key, value]) => 
       updateSetting(`branding.${key}`, value, 'string', true)
     );
-    
     return Promise.all(promises);
   };
 
