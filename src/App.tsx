@@ -1,12 +1,19 @@
 
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
-import { BrowserRouter } from 'react-router-dom';
+import { BrowserRouter, Routes, Route } from 'react-router-dom';
 import { Toaster } from '@/components/ui/toaster';
 import { ThemeProvider } from '@/contexts/ThemeContext';
 import { WhiteLabelProvider } from '@/providers/WhiteLabelProvider';
 import { SecurityProvider } from '@/components/SecurityProvider';
 import SessionTimeout from '@/components/SessionTimeout';
 import NavigationWrapper from '@/components/NavigationWrapper';
+import Index from '@/pages/Index';
+import Student from '@/pages/Student';
+import Teacher from '@/pages/Teacher';
+import Admin from '@/pages/Admin';
+import Parent from '@/pages/Parent';
+import Alumni from '@/pages/Alumni';
+import NotFound from '@/pages/NotFound';
 import './App.css';
 
 const queryClient = new QueryClient({
@@ -28,7 +35,15 @@ function App() {
             <BrowserRouter>
               <SessionTimeout />
               <NavigationWrapper>
-                <div></div>
+                <Routes>
+                  <Route path="/" element={<Index />} />
+                  <Route path="/student" element={<Student />} />
+                  <Route path="/faculty" element={<Teacher />} />
+                  <Route path="/admin" element={<Admin />} />
+                  <Route path="/parent" element={<Parent />} />
+                  <Route path="/alumni" element={<Alumni />} />
+                  <Route path="*" element={<NotFound />} />
+                </Routes>
               </NavigationWrapper>
               <Toaster />
             </BrowserRouter>
