@@ -1,83 +1,14 @@
-
-import React, { useEffect, useState } from 'react';
-import { useNavigate } from 'react-router-dom';
-import { supabase } from '@/integrations/supabase/client';
-import { Session } from '@supabase/supabase-js';
+import React from 'react';
 import { Button } from '@/components/ui/button';
 import { Moon, Sun } from 'lucide-react';
 import { useTheme } from '@/contexts/ThemeContext';
 import MultiStepLogin from '@/components/MultiStepLogin';
 import SessionTimeout from '@/components/SessionTimeout';
-import { validateSessionIntegrity } from '@/utils/sessionSecurity';
+import { useAuth } from '@/hooks/useAuth';
 
 const Index = () => {
-  const navigate = useNavigate();
-  const [session, setSession] = useState<Session | null>(null);
-  const [loading, setLoading] = useState(true);
   const { theme, toggleTheme } = useTheme();
-
-  useEffect(() => {
-    let mounted = true;
-
-    const checkAuthState = async () => {
-      try {
-        // Enhanced session validation
-        const sessionValid = await validateSessionIntegrity();
-        
-        if (sessionValid) {
-          const { data: { session } } = await supabase.auth.getSession();
-          if (mounted && session) {
-            setSession(session);
-            // User has valid session, NavigationWrapper will handle redirect
-          }
-        }
-      } catch (error) {
-        console.error('Session validation error:', error);
-      } finally {
-        if (mounted) {
-          setLoading(false);
-        }
-      }
-    };
-
-    // Set up auth state listener with enhanced security
-    const { data: { subscription } } = supabase.auth.onAuthStateChange(
-      async (event, session) => {
-        if (!mounted) return;
-        
-        console.log('Index: Auth state changed:', event, session?.user?.email);
-        
-        if (event === 'SIGNED_OUT') {
-          localStorage.clear();
-          sessionStorage.clear();
-          setSession(null);
-          setLoading(false);
-          return;
-        }
-        
-        if (session) {
-          // Validate session integrity on auth state change
-          const sessionValid = await validateSessionIntegrity();
-          if (sessionValid) {
-            setSession(session);
-          } else {
-            setSession(null);
-          }
-        } else {
-          setSession(null);
-        }
-        
-        setLoading(false);
-      }
-    );
-
-    checkAuthState();
-
-    return () => {
-      mounted = false;
-      subscription.unsubscribe();
-    };
-  }, []);
+  const { session, loading, isAuthenticated } = useAuth();
 
   // Show loading spinner while checking authentication
   if (loading) {
@@ -90,8 +21,16 @@ const Index = () => {
 
   return (
     <div className="min-h-screen bg-background">
-      {/* Enhanced security: Session timeout for authenticated users */}
-      {session && <SessionTimeout />}
+      {/* Session timeout for authenticated users */}
+      {isAuthenticated && session && (
+        <SessionTimeout 
+          sessionId={session.access_token}
+          onLogout={() => {
+            // SessionTimeout will handle the logout through useAuth
+            console.log('Session timeout triggered');
+          }}
+        />
+      )}
       
       {/* Industrial Grid Background */}
       <div className="fixed inset-0 bg-[linear-gradient(to_right,rgba(255,255,255,0.02)_1px,transparent_1px),linear-gradient(to_bottom,rgba(255,255,255,0.02)_1px,transparent_1px)] bg-[size:40px_40px] pointer-events-none" />

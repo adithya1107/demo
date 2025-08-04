@@ -1,4 +1,3 @@
-
 import React, { createContext, useContext, useEffect } from 'react';
 import { ThemeEngine } from '@/components/whitelabel/ThemeEngine';
 import { useCollegeConfiguration } from '@/hooks/useCollegeConfiguration';
@@ -27,20 +26,16 @@ export const WhiteLabelProvider: React.FC<WhiteLabelProviderProps> = ({ children
   const { collegeConfig, loading } = useCollegeConfiguration();
 
   useEffect(() => {
-    // Register all default blocks when the provider initializes
+    console.log('🧩 Registering default blocks from WhiteLabelProvider');
     registerDefaultBlocks();
   }, []);
 
-  if (loading) {
-    return (
-      <div className="min-h-screen flex items-center justify-center">
-        <div className="animate-spin rounded-full h-32 w-32 border-b-2 border-primary"></div>
-      </div>
-    );
-  }
+  // Debug current state
+  console.log('🏷️ WhiteLabelProvider render:', { loading, hasConfig: !!collegeConfig });
 
+  // DON'T BLOCK - always render children
   const contextValue: WhiteLabelContextType = {
-    collegeConfig,
+    collegeConfig: collegeConfig || {},
     isConfigured: !!collegeConfig
   };
 
