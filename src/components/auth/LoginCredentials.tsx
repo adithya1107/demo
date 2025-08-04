@@ -1,4 +1,3 @@
-
 import React, { useState } from 'react';
 import { Input } from '@/components/ui/input';
 import { Button } from '@/components/ui/button';
@@ -46,19 +45,8 @@ export const LoginCredentials: React.FC<LoginCredentialsProps> = ({
     try {
       const sanitizedUserCode = sanitizeInput(userCode.trim());
       
-      // Get college code from the validated college data
-      const { data: collegeInfo } = await supabase
-        .from('colleges')
-        .select('code')
-        .eq('id', collegeData.college_id)
-        .single();
-
-      if (!collegeInfo) {
-        throw new Error('College information not found');
-      }
-
-      // Query user profile directly without password check (will be handled by auth)
-      const { data: userProfile, error: loginError } = await supabase
+      // First, verify user exists and get their email
+      const { data: userProfile, error: profileError } = await supabase
         .from('user_profiles')
         .select('id, user_type, first_name, last_name, email, college_id, is_active, user_code')
         .eq('user_code', sanitizedUserCode)
@@ -66,37 +54,68 @@ export const LoginCredentials: React.FC<LoginCredentialsProps> = ({
         .eq('is_active', true)
         .single();
 
-      if (loginError) throw loginError;
-
-      if (userProfile) {
-        // Create the email format that Supabase expects
-        const email = `${sanitizedUserCode}@${collegeInfo.code.toLowerCase()}.edu`;
-        
-        // Sign in with Supabase Auth using the constructed email
-        const { data: authData, error: authError } = await supabase.auth.signInWithPassword({
-          email: email,
-          password: password,
-        });
-
-        if (authError) {
-          throw authError;
-        }
-
-        if (authData.user) {
-          onLogin(userProfile);
-        }
-      } else {
+      if (profileError || !userProfile) {
         toast({
           title: 'Login Failed',
-          description: 'Invalid credentials. Please check your user code and password.',
+          description: 'User not found or account inactive. Please check your user code.',
           variant: 'destructive',
         });
+        return;
       }
+
+      // Use the email directly from the user profile
+      if (!userProfile.email) {
+        throw new Error('User email not found in profile');
+      }
+
+      // Authenticate with Supabase Auth using the stored email and provided password
+      const { data: authData, error: authError } = await supabase.auth.signInWithPassword({
+        email: userProfile.email,
+        password: password,
+      });
+
+      if (authError) {
+        // Handle specific auth errors
+        if (authError.message.includes('Invalid login credentials')) {
+          toast({
+            title: 'Login Failed',
+            description: 'Invalid password. Please check your credentials and try again.',
+            variant: 'destructive',
+          });
+        } else if (authError.message.includes('Email not confirmed')) {
+          toast({
+            title: 'Account Not Verified',
+            description: 'Please verify your email address before logging in.',
+            variant: 'destructive',
+          });
+        } else {
+          toast({
+            title: 'Authentication Error',
+            description: authError.message || 'Authentication failed. Please try again.',
+            variant: 'destructive',
+          });
+        }
+        return;
+      }
+
+      if (authData.user) {
+        // Successful authentication - pass user profile data to parent
+        onLogin({
+          ...userProfile,
+          auth_user_id: authData.user.id
+        });
+        
+        toast({
+          title: 'Login Successful',
+          description: `Welcome back, ${userProfile.first_name}!`,
+        });
+      }
+
     } catch (error: any) {
       console.error('Login error:', error);
       toast({
         title: 'Login Error',
-        description: error.message || 'An error occurred during login. Please try again.',
+        description: error.message || 'An unexpected error occurred during login. Please try again.',
         variant: 'destructive',
       });
     } finally {
@@ -127,6 +146,7 @@ export const LoginCredentials: React.FC<LoginCredentialsProps> = ({
               onChange={(e) => setUserCode(e.target.value)}
               placeholder="Enter your user code"
               disabled={loading}
+              autoComplete="username"
             />
           </div>
           <div>
@@ -140,6 +160,7 @@ export const LoginCredentials: React.FC<LoginCredentialsProps> = ({
               onChange={(e) => setPassword(e.target.value)}
               placeholder="Enter your password"
               disabled={loading}
+              autoComplete="current-password"
             />
           </div>
           <div className="flex space-x-2">
